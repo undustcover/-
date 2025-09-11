@@ -333,9 +333,12 @@ const getTypeText = (category: string) => {
   const textMap: Record<string, string> = {
     production_coordination: '生产协调',
     project_management: '项目管理',
-    general_work: '综合工作'
+    general_work: '综合工作',
+    '生产协调': '生产协调',
+    '项目管理': '项目管理',
+    '综合工作': '综合工作'
   }
-  return textMap[category] || '未知类型'
+  return textMap[category] || category || '未知类型'
 }
 
 // 检查是否逾期

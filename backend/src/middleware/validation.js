@@ -144,7 +144,34 @@ const taskSchemas = {
   })
 };
 
-// 查询参数验证
+// 里程碑相关验证规则
+const milestoneSchemas = {
+  create: Joi.object({
+    task_id: Joi.number().integer().required().messages({
+      'any.required': '任务ID是必填项'
+    }),
+    title: Joi.string().max(200).required().messages({
+      'string.max': '里程碑标题最多200个字符',
+      'any.required': '里程碑标题是必填项'
+    }),
+    description: Joi.string().optional(),
+    target_date: Joi.date().iso().required().messages({
+      'any.required': '目标日期是必填项'
+    }),
+    reminder_days: Joi.number().integer().min(0).default(3)
+  }),
+
+  update: Joi.object({
+    title: Joi.string().max(200).optional(),
+    description: Joi.string().optional(),
+    target_date: Joi.date().iso().optional(),
+    reminder_days: Joi.number().integer().min(0).optional(),
+    is_achieved: Joi.boolean().optional(),
+    achieved_date: Joi.date().iso().optional()
+  })
+};
+
+// 查询相关验证规则
 const querySchemas = {
   pagination: Joi.object({
     page: Joi.number().integer().min(1).default(1),
@@ -169,5 +196,6 @@ module.exports = {
   validate,
   userSchemas,
   taskSchemas,
+  milestoneSchemas,
   querySchemas
 };

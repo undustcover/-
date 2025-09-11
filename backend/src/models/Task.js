@@ -215,6 +215,14 @@ class Task {
     ];
     
     return await transaction(async (connection) => {
+      // 先获取当前任务信息以便比较状态是否变化
+      const existing = await query('SELECT status, title FROM tasks WHERE id = ?', [id]);
+      if (!existing || existing.length === 0) {
+        throw new Error('任务不存在');
+      }
+      const oldStatus = existing[0].status;
+      const taskTitle = existing[0].title;
+
       const updates = [];
       const params = [];
       let logDetails = [];
@@ -223,7 +231,7 @@ class Task {
         if (allowedFields.includes(key) && updateData[key] !== undefined) {
           updates.push(`${key} = ?`);
           params.push(updateData[key]);
-          logDetails.push(`${key}: ${updateData[key]}`);
+          logDetails.push(`${key}: ${Array.isArray(updateData[key]) ? updateData[key].join(', ') : updateData[key]}`);
         }
       });
 
@@ -237,7 +245,7 @@ class Task {
       const sql = `UPDATE tasks SET ${updates.join(', ')} WHERE id = ?`;
       const result = await query(sql, params);
       
-      if (result.changes === 0) {
+      if (!result || (result.changes !== undefined && result.changes === 0)) {
         throw new Error('任务不存在');
       }
 
@@ -246,12 +254,24 @@ class Task {
         logDetails.push(`tags: ${updateData.tags.join(', ')}`);
       }
 
-      // 记录操作日志
-      const logSql = `
+      // 如果存在状态字段且状态有变化，则记录为 status_change 日志，否则记录为通用 update 日志
+      const hasStatusUpdate = Object.prototype.hasOwnProperty.call(updateData, 'status');
+      const newStatus = hasStatusUpdate ? updateData.status : oldStatus;
+
+      if (hasStatusUpdate && newStatus !== oldStatus) {
+        const logSql = `
+        INSERT INTO task_logs (task_id, user_id, action, details, created_at)
+        VALUES (?, ?, 'status_change', ?, datetime('now', 'localtime'))
+      `;
+        const details = `任务「${taskTitle || id}」状态从 ${oldStatus} 变更为 ${newStatus}`;
+        await query(logSql, [id, userId, details]);
+      } else {
+        const logSql = `
         INSERT INTO task_logs (task_id, user_id, action, details, created_at)
         VALUES (?, ?, 'update', ?, datetime('now', 'localtime'))
       `;
-      await query(logSql, [id, userId, `更新任务: ${logDetails.join(', ')}`]);
+        await query(logSql, [id, userId, `更新任务: ${logDetails.join(', ')}`]);
+      }
 
       return true;
     });
@@ -366,7 +386,8 @@ class Task {
     const offset = (page - 1) * limit;
     
     const sql = `
-      SELECT tl.*, u.real_name as user_name, u.avatar as user_avatar
+      SELECT tl.id, tl.task_id, tl.user_id, tl.action, tl.details, tl.created_at,
+             u.real_name as user_name, u.avatar as user_avatar
       FROM task_logs tl
       LEFT JOIN users u ON tl.user_id = u.id
       WHERE tl.task_id = ?

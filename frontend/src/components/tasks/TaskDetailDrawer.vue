@@ -29,11 +29,11 @@
         </div>
         
         <div class="task-actions">
-          <el-button size="small" @click="editTask">
+          <el-button size="small" v-if="canEdit" @click="editTask">
             <el-icon><Edit /></el-icon>
             编辑
           </el-button>
-          <el-button size="small" type="danger" @click="deleteTask">
+          <el-button size="small" v-if="canDelete" type="danger" @click="deleteTask">
             <el-icon><Delete /></el-icon>
             删除
           </el-button>
@@ -234,6 +234,7 @@ import {
 import dayjs from 'dayjs'
 import TaskEditDialog from './TaskEditDialog.vue'
 import type { Task, TaskComment } from '@/types/task'
+import { useAuthStore } from '@/stores/auth'
 
 // Props
 interface Props {
@@ -448,6 +449,36 @@ watch(visible, (newVal) => {
     loadComments()
   }
 })
+
+const authStore = useAuthStore()
+
+// 根据用户角色和任务所有权判断是否可编辑
+const canEdit = computed(() => {
+  const t = props.task;
+  const u = authStore.user;
+  if (!t || !u) return false;
+
+  if (authStore.isAdmin || authStore.isSuperAdmin || authStore.isManager) {
+    return true;
+  }
+
+  const assigneeId = (t as any).assignee_id ?? (t as any).assigned_to ?? (t as any).assignee?.id;
+  return String(u.id) === String(assigneeId);
+});
+
+// 根据用户角色和任务所有权判断是否可删除
+const canDelete = computed(() => {
+  const t = props.task;
+  const u = authStore.user;
+  if (!t || !u) return false;
+
+  if (authStore.isAdmin || authStore.isSuperAdmin) {
+    return true;
+  }
+
+  const creatorId = (t as any).creator_id ?? (t as any).created_by ?? (t as any).creator?.id;
+  return String(u.id) === String(creatorId);
+});
 </script>
 
 <style scoped>

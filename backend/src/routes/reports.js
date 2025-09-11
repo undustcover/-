@@ -262,8 +262,8 @@ router.get('/users/performance', async (req, res) => {
       end_date
     } = req.query;
     
-    // 如果不是管理员，只能查看自己的绩效
-    const targetUserId = (req.user.role === 'admin' || req.user.role === 'super_admin') 
+    // 管理员、超级管理员、经理可查看任意用户绩效；其他用户仅能查看自己的绩效
+    const targetUserId = (req.user.role === 'admin' || req.user.role === 'super_admin' || req.user.role === 'manager') 
       ? (user_id || req.user.id) 
       : req.user.id;
     

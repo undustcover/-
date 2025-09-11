@@ -150,6 +150,7 @@
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
             <el-button
+              v-if="canEdit(row)"
               type="primary"
               size="small"
               text
@@ -158,6 +159,7 @@
               编辑
             </el-button>
             <el-button
+              v-if="canDelete(row)"
               type="danger"
               size="small"
               text
@@ -208,9 +210,11 @@ import { useTasksStore } from '@/stores/tasks'
 import TaskCreateDialog from '@/components/tasks/TaskCreateDialog.vue'
 import TaskEditDialog from '@/components/tasks/TaskEditDialog.vue'
 import type { Task } from '@/types/task'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const tasksStore = useTasksStore()
+const authStore = useAuthStore()
 
 // 响应式数据
 const loading = ref(false)
@@ -239,7 +243,21 @@ const users = ref([
 ])
 
 // 计算属性
-const tasks = computed(() => tasksStore.tasks)
+const tasks = computed(() => {
+   const all = tasksStore.tasks
+   const u = authStore.user
+ 
+   // 非经理（含普通用户）：仅展示与自己相关的任务（创建者或负责人）
+   if (!authStore.isManager) {
+     return all.filter(t => {
+       const creatorId = (t as any).creator_id ?? (t as any).created_by ?? (t as any).creator?.id
+       const assigneeId = (t as any).assignee_id ?? (t as any).assigned_to ?? (t as any).assignee?.id
+       return String(creatorId) === String(u?.id) || String(assigneeId) === String(u?.id)
+     })
+   }
+ 
+   return all
+ })
 
 // 获取状态类型
 const getStatusType = (status: string) => {
@@ -457,6 +475,32 @@ const fetchTasks = async () => {
 onMounted(() => {
   fetchTasks()
 })
+
+// 根据用户角色和任务所有权判断是否可编辑
+const canEdit = (t: Task) => {
+  const u = authStore.user;
+  if (!t || !u) return false;
+
+  if (authStore.isAdmin || authStore.isSuperAdmin || authStore.isManager) {
+    return true;
+  }
+
+  const assigneeId = (t as any).assignee_id ?? (t as any).assigned_to ?? (t as any).assignee?.id;
+  return String(u.id) === String(assigneeId);
+};
+
+// 根据用户角色和任务所有权判断是否可删除
+const canDelete = (t: Task) => {
+  const u = authStore.user;
+  if (!t || !u) return false;
+
+  if (authStore.isAdmin || authStore.isSuperAdmin) {
+    return true;
+  }
+
+  const creatorId = (t as any).creator_id ?? (t as any).created_by ?? (t as any).creator?.id;
+  return String(u.id) === String(creatorId);
+};
 </script>
 
 <style scoped>

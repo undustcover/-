@@ -37,13 +37,19 @@ process.on('SIGINT', () => {
   });
 });
 
-// 未捕获异常处理
+// 错误处理
 process.on('uncaughtException', (err) => {
   console.error('未捕获异常:', err);
-  process.exit(1);
+  // 在记录日志后，优雅地关闭服务器
+  server.close(() => {
+    process.exit(1);
+  });
 });
 
 process.on('unhandledRejection', (reason, promise) => {
   console.error('未处理的Promise拒绝:', reason);
-  process.exit(1);
+  // 在记录日志后，优雅地关闭服务器
+  server.close(() => {
+    process.exit(1);
+  });
 });

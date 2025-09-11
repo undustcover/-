@@ -34,6 +34,24 @@ CREATE TABLE IF NOT EXISTS task_logs (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 )`;
 
+// 创建milestones表
+const createMilestonesTable = `
+CREATE TABLE IF NOT EXISTS milestones (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  task_id INTEGER NOT NULL,
+  title VARCHAR(200) NOT NULL,
+  description TEXT,
+  due_date DATE NOT NULL,
+  is_completed BOOLEAN DEFAULT 0,
+  completed_at DATETIME,
+  reminder_days INTEGER DEFAULT 1,
+  created_by INTEGER NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+)`;
+
 db.serialize(() => {
   // 创建task_comments表
   db.run(createCommentsTable, (err) => {
@@ -50,6 +68,15 @@ db.serialize(() => {
       console.error('创建task_logs表失败:', err);
     } else {
       console.log('✅ task_logs表创建成功');
+    }
+  });
+  
+  // 创建milestones表
+  db.run(createMilestonesTable, (err) => {
+    if (err) {
+      console.error('创建milestones表失败:', err);
+    } else {
+      console.log('✅ milestones表创建成功');
     }
   });
   

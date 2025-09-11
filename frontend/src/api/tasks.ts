@@ -67,6 +67,11 @@ export const taskApi = {
     return request.get(`/tasks/${id}/logs`, { params })
   },
 
+  // 最近活动（任务创建与状态变更）
+  getRecentActivities(params?: { limit?: number; offset?: number }) {
+    return request.get('/tasks/recent-activities', { params })
+  },
+
   // 添加任务评论
   addTaskComment(id: string, content: string) {
     return request.post(`/tasks/${id}/comments`, { content })

@@ -261,7 +261,7 @@ const rules = computed((): FormRules => {
     ],
     phone: [
       { required: true, message: '请输入手机号', trigger: 'blur' },
-      { pattern: /^1[3-9]\d{9}$/, message: '请输入正确的手机号格式', trigger: 'blur' }
+      { pattern: /^1[3-9]\d{9}$/, message: '请输入正确的手机号格式（以1开头的11位数字）', trigger: 'blur' }
     ],
     department: [
       { required: true, message: '请选择部门', trigger: 'change' }
@@ -417,6 +417,20 @@ const handleSubmit = async () => {
     
   } catch (error) {
     console.error('表单验证失败:', error)
+    // 显示具体的验证错误信息
+    if (error && typeof error === 'object') {
+      const errorFields = Object.keys(error)
+      if (errorFields.length > 0) {
+        const firstError = error[errorFields[0]][0]?.message
+        if (firstError) {
+          ElMessage.error(firstError)
+        } else {
+          ElMessage.error('表单验证失败，请检查输入内容')
+        }
+      }
+    } else {
+      ElMessage.error('表单验证失败，请检查输入内容')
+    }
   } finally {
     loading.value = false
   }

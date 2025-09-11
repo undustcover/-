@@ -134,7 +134,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { Clock, Loading, Check, Warning, DocumentRemove, Bell } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
@@ -219,39 +219,51 @@ const formatTime = (time: string) => {
 // 获取仪表板数据（真实接口）
 const fetchDashboardData = async () => {
   loading.value = true
+  console.log('Fetching dashboard data. Current authStore.user:', JSON.stringify(authStore.user));
   try {
     const userId = authStore.user?.id
+    console.log('User ID for fetch:', userId);
 
-    const [statsRes, myTasksRes, notificationsRes] = await Promise.all([
+    const [statsRes, myTasksRes, activitiesRes] = await Promise.all([
       taskApi.getTaskStats(),
       taskApi.getTasks({ assigned_to: userId ? String(userId) : undefined, limit: 5, sort: 'updated_at', order: 'desc' }),
-      request.get('/notifications', { params: { limit: 10 } })
+      taskApi.getRecentActivities({ limit: 10 })
     ])
 
-    // 任务统计
-    if (statsRes && (statsRes as any).stats) {
-      stats.value = (statsRes as any).stats
+    // 任务统计（兼容不同返回结构）
+    const statsPayload = (statsRes as any)?.data?.stats ?? (statsRes as any)?.stats
+    if (statsPayload) {
+      stats.value = statsPayload
+    } else {
+      console.warn('Dashboard: stats payload not found, statsRes shape =', statsRes)
     }
 
-    // 我的任务列表
-    const tasksData = (myTasksRes as any)?.tasks || []
-    myTasks.value = tasksData
+    // 我的任务列表（兼容不同返回结构）
+    const tasksData = (myTasksRes as any)?.data?.tasks ?? (myTasksRes as any)?.tasks ?? (myTasksRes as any)?.data ?? []
+    myTasks.value = Array.isArray(tasksData) ? tasksData : []
+    if (!Array.isArray(tasksData)) {
+      console.warn('Dashboard: tasks payload not array, myTasksRes shape =', myTasksRes)
+    }
 
-    // 最近活动（通知）
-    const notifications = (notificationsRes as any)?.notifications || []
-    recentActivities.value = notifications.map((n: any) => ({
-      id: n.id,
-      description: (n.title ? `${n.title}${n.content ? ' - ' + n.content : ''}` : (n.content || '通知')).trim(),
-      created_at: n.created_at
+    // 最近活动（任务日志：创建与状态变更）
+    const activitiesList = (activitiesRes as any)?.data?.activities ?? (activitiesRes as any)?.activities ?? []
+    recentActivities.value = (Array.isArray(activitiesList) ? activitiesList : []).map((a: any) => ({
+      id: a.id,
+      description: a.description || `${a.user_name || '有人'} ${a.details || ''}`,
+      created_at: a.created_at
     }))
   } catch (error) {
-    console.error('Failed to fetch dashboard data:', error)
+    console.error('获取仪表板数据失败:', error)
   } finally {
     loading.value = false
   }
 }
 
 onMounted(() => {
+  fetchDashboardData()
+})
+
+watch(() => authStore.user, () => {
   fetchDashboardData()
 })
 </script>

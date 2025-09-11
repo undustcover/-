@@ -121,11 +121,24 @@ const transaction = async (callback) => {
   }
 };
 
+const end = () => {
+  if (dbType === 'sqlite') {
+    db.close((err) => {
+      if (err) {
+        console.error('关闭SQLite连接时出错:', err.message);
+      }
+    });
+  } else if (pool) {
+    pool.end();
+  }
+};
+
 module.exports = {
   pool,
   promisePool,
   db,
   query,
   transaction,
-  testConnection
+  testConnection,
+  end
 };

@@ -22,6 +22,14 @@ http.interceptors.request.use(
       config.headers = config.headers || {}
       config.headers.Authorization = `Bearer ${authStore.token}`
     }
+
+    // 为GET请求添加时间戳以禁用缓存
+    if (config.method === 'get') {
+      config.params = {
+        ...config.params,
+        _t: new Date().getTime()
+      }
+    }
     
     return config
   },

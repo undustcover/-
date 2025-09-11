@@ -11,7 +11,7 @@ const app = express();
 // 中间件配置
 app.use(helmet()); // 安全头
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: [process.env.FRONTEND_URL || 'http://localhost:5173', 'http://localhost:5174'],
   credentials: true
 })); // 跨域
 
@@ -32,6 +32,8 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const taskRoutes = require('./routes/tasks');
+const taskDependencyRoutes = require('./routes/taskDependencies');
+const milestoneRoutes = require('./routes/milestones');
 const fileRoutes = require('./routes/files');
 const notificationRoutes = require('./routes/notifications');
 const reportRoutes = require('./routes/reports');
@@ -39,6 +41,8 @@ const reportRoutes = require('./routes/reports');
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/tasks', taskRoutes);
+app.use('/api/task-dependencies', taskDependencyRoutes);
+app.use('/api/milestones', milestoneRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/reports', reportRoutes);

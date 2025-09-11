@@ -8,19 +8,19 @@
             :type="viewMode === 'day' ? 'primary' : ''"
             @click="setViewMode('day')"
           >
-            日
+            日视图
           </el-button>
           <el-button
             :type="viewMode === 'week' ? 'primary' : ''"
             @click="setViewMode('week')"
           >
-            周
+            周视图
           </el-button>
           <el-button
             :type="viewMode === 'month' ? 'primary' : ''"
             @click="setViewMode('month')"
           >
-            月
+            月视图
           </el-button>
         </el-button-group>
         
@@ -38,6 +38,30 @@
           <el-icon><Plus /></el-icon>
           新建任务
         </el-button>
+        
+        <el-dropdown @command="handleExport">
+          <el-button>
+            <el-icon><Download /></el-icon>
+            导出
+            <el-icon class="el-icon--right"><arrow-down /></el-icon>
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="png">
+                <el-icon><Picture /></el-icon>
+                导出为图片
+              </el-dropdown-item>
+              <el-dropdown-item command="pdf">
+                <el-icon><Document /></el-icon>
+                导出为PDF
+              </el-dropdown-item>
+              <el-dropdown-item command="excel">
+                <el-icon><Grid /></el-icon>
+                导出为Excel
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </div>
     </div>
     
@@ -45,931 +69,797 @@
     <el-card class="filter-card">
       <div class="filter-row">
         <div class="filter-item">
+          <label>项目筛选：</label>
           <el-select
-            v-model="filters.assignee"
-            placeholder="负责人"
+            v-model="filters.project_id"
+            placeholder="选择项目"
             clearable
-            @change="handleFilter"
+            @change="loadGanttData"
           >
             <el-option
-              v-for="user in users"
-              :key="user.id"
-              :label="user.real_name"
-              :value="user.id"
+              v-for="project in projects"
+              :key="project.id"
+              :label="project.name"
+              :value="project.id"
             />
           </el-select>
         </div>
         
         <div class="filter-item">
-          <el-select
-            v-model="filters.priority"
-            placeholder="优先级"
-            clearable
-            @change="handleFilter"
-          >
-            <el-option label="低" value="low" />
-            <el-option label="中" value="medium" />
-            <el-option label="高" value="high" />
-            <el-option label="紧急" value="urgent" />
-          </el-select>
-        </div>
-        
-        <div class="filter-item">
-          <el-select
-            v-model="filters.status"
-            placeholder="状态"
-            clearable
-            @change="handleFilter"
-          >
-            <el-option label="待处理" value="pending" />
-            <el-option label="进行中" value="in_progress" />
-            <el-option label="已完成" value="completed" />
-            <el-option label="已取消" value="cancelled" />
-          </el-select>
-        </div>
-        
-        <div class="filter-item">
+          <label>时间范围：</label>
           <el-date-picker
             v-model="dateRange"
             type="daterange"
             range-separator="至"
             start-placeholder="开始日期"
             end-placeholder="结束日期"
-            format="YYYY-MM-DD"
-            value-format="YYYY-MM-DD"
-            @change="handleDateRangeChange"
+            @change="loadGanttData"
           />
         </div>
         
         <div class="filter-item">
-          <el-button @click="resetFilters">
-            <el-icon><Refresh /></el-icon>
-            重置
-          </el-button>
+          <label>负责人：</label>
+          <el-select
+            v-model="filters.assignee"
+            placeholder="选择负责人"
+            clearable
+            @change="loadGanttData"
+          >
+            <el-option
+              v-for="user in users"
+              :key="user.id"
+              :label="user.username"
+              :value="user.id"
+            />
+          </el-select>
         </div>
       </div>
     </el-card>
     
-    <!-- 甘特图主体 -->
-    <el-card class="gantt-card" v-loading="loading">
-      <div class="gantt-container">
-        <!-- 任务列表 -->
-        <div class="task-list-panel">
-          <div class="task-list-header">
-            <div class="header-cell task-name">任务名称</div>
-            <div class="header-cell assignee">负责人</div>
-            <div class="header-cell duration">工期</div>
-            <div class="header-cell progress">进度</div>
-          </div>
-          
-          <div class="task-list-body">
-            <div
-              v-for="task in filteredTasks"
-              :key="task.id"
-              class="task-row"
-              :class="{ 'task-selected': selectedTask?.id === task.id }"
-              @click="selectTask(task)"
-            >
-              <div class="task-cell task-name">
-                <div class="task-info">
-                  <span class="task-title">{{ task.title }}</span>
-                  <div class="task-meta">
-                    <el-tag
-                      :type="getPriorityType(task.priority)"
-                      size="small"
-                      effect="plain"
-                    >
-                      {{ getPriorityText(task.priority) }}
-                    </el-tag>
-                    <el-tag
-                      :type="getStatusType(task.status)"
-                      size="small"
-                      effect="plain"
-                    >
-                      {{ getStatusText(task.status) }}
-                    </el-tag>
-                  </div>
-                </div>
-              </div>
-              
-              <div class="task-cell assignee">
-                <div v-if="task.assignee" class="assignee-info">
-                  <el-avatar :size="20" :src="task.assignee.avatar">
-                    {{ task.assignee.real_name?.charAt(0) }}
-                  </el-avatar>
-                  <span class="assignee-name">{{ task.assignee.real_name }}</span>
-                </div>
-                <span v-else class="unassigned">未分配</span>
-              </div>
-              
-              <div class="task-cell duration">
-                {{ calculateDuration(task.start_date, task.due_date) }}天
-              </div>
-              
-              <div class="task-cell progress">
-                <el-progress
-                  :percentage="task.progress || 0"
-                  :stroke-width="6"
-                  :show-text="false"
-                />
-                <span class="progress-text">{{ task.progress || 0 }}%</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <!-- 时间轴和甘特条 -->
-        <div class="gantt-chart-panel">
-          <!-- 时间轴头部 -->
-          <div class="timeline-header">
-            <div class="timeline-scale">
-              <div
-                v-for="date in timelineData"
-                :key="date.key"
-                class="timeline-cell"
-                :style="{ width: cellWidth + 'px' }"
-              >
-                <div class="timeline-date">{{ date.label }}</div>
-                <div v-if="date.subLabel" class="timeline-sub">{{ date.subLabel }}</div>
-              </div>
-            </div>
-          </div>
-          
-          <!-- 甘特条区域 -->
-          <div class="gantt-bars">
-            <div
-              v-for="task in filteredTasks"
-              :key="task.id"
-              class="gantt-row"
-              :class="{ 'gantt-selected': selectedTask?.id === task.id }"
-            >
-              <!-- 今日线 -->
-              <div
-                class="today-line"
-                :style="{ left: todayPosition + 'px' }"
-              ></div>
-              
-              <!-- 任务条 -->
-              <div
-                v-if="task.start_date && task.due_date"
-                class="gantt-bar"
-                :class="[
-                  `priority-${task.priority}`,
-                  `status-${task.status}`,
-                  { 'overdue': isOverdue(task.due_date) }
-                ]"
-                :style="getBarStyle(task)"
-                @click="selectTask(task)"
-              >
-                <div class="bar-content">
-                  <div class="bar-progress" :style="{ width: (task.progress || 0) + '%' }"></div>
-                  <div class="bar-text">{{ task.title }}</div>
-                </div>
-                
-                <!-- 依赖关系线 -->
-                <div
-                  v-if="task.dependencies?.length"
-                  class="dependency-lines"
-                >
-                  <!-- TODO: 绘制依赖关系线 -->
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </el-card>
+    <!-- 甘特图容器 -->
+    <div class="gantt-container">
+      <div ref="ganttContainer" class="gantt-chart"></div>
+    </div>
     
-    <!-- 任务详情侧边栏 -->
-    <el-drawer
-      v-model="showTaskDetail"
-      title="任务详情"
-      size="400px"
-      direction="rtl"
-    >
-      <div v-if="selectedTask" class="task-detail-content">
-        <div class="detail-section">
-          <h3>基本信息</h3>
-          <div class="detail-item">
-            <label>任务标题</label>
-            <span>{{ selectedTask.title }}</span>
-          </div>
-          <div class="detail-item">
-            <label>状态</label>
-            <el-tag :type="getStatusType(selectedTask.status)">
-              {{ getStatusText(selectedTask.status) }}
-            </el-tag>
-          </div>
-          <div class="detail-item">
-            <label>优先级</label>
-            <el-tag :type="getPriorityType(selectedTask.priority)">
-              {{ getPriorityText(selectedTask.priority) }}
-            </el-tag>
-          </div>
-          <div class="detail-item">
-            <label>负责人</label>
-            <div v-if="selectedTask.assignee" class="assignee-detail">
-              <el-avatar :size="24" :src="selectedTask.assignee.avatar">
-                {{ selectedTask.assignee.real_name?.charAt(0) }}
-              </el-avatar>
-              <span>{{ selectedTask.assignee.real_name }}</span>
-            </div>
-            <span v-else class="unassigned">未分配</span>
-          </div>
-        </div>
-        
-        <div class="detail-section">
-          <h3>时间信息</h3>
-          <div class="detail-item">
-            <label>开始时间</label>
-            <span>{{ formatDate(selectedTask.start_date) }}</span>
-          </div>
-          <div class="detail-item">
-            <label>截止时间</label>
-            <span>{{ formatDate(selectedTask.due_date) }}</span>
-          </div>
-          <div class="detail-item">
-            <label>工期</label>
-            <span>{{ calculateDuration(selectedTask.start_date, selectedTask.due_date) }}天</span>
-          </div>
-        </div>
-        
-        <div class="detail-section">
-          <h3>进度信息</h3>
-          <div class="detail-item">
-            <label>完成进度</label>
-            <el-progress :percentage="selectedTask.progress || 0" />
-          </div>
-          <div class="detail-item">
-            <label>预估工时</label>
-            <span>{{ selectedTask.estimated_hours || 0 }}小时</span>
-          </div>
-        </div>
-        
-        <div class="detail-actions">
-          <el-button type="primary" @click="editTask(selectedTask)">
-            编辑任务
-          </el-button>
-          <el-button @click="viewTaskDetail(selectedTask)">
-            查看详情
-          </el-button>
-        </div>
-      </div>
-    </el-drawer>
-    
-    <!-- 创建任务对话框 -->
-    <TaskCreateDialog
+    <!-- 任务创建对话框 -->
+    <el-dialog
       v-model="showCreateDialog"
-      @success="handleCreateSuccess"
-    />
+      title="新建任务"
+      width="600px"
+      @close="resetCreateForm"
+    >
+      <el-form
+        ref="createFormRef"
+        :model="createForm"
+        :rules="createRules"
+        label-width="100px"
+      >
+        <el-form-item label="任务标题" prop="title">
+          <el-input v-model="createForm.title" placeholder="请输入任务标题" />
+        </el-form-item>
+        
+        <el-form-item label="任务描述" prop="description">
+          <el-input
+            v-model="createForm.description"
+            type="textarea"
+            :rows="3"
+            placeholder="请输入任务描述"
+          />
+        </el-form-item>
+        
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="开始时间" prop="start_date">
+              <el-date-picker
+                v-model="createForm.start_date"
+                type="date"
+                placeholder="选择开始时间"
+                style="width: 100%"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="结束时间" prop="end_date">
+              <el-date-picker
+                v-model="createForm.end_date"
+                type="date"
+                placeholder="选择结束时间"
+                style="width: 100%"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="优先级" prop="priority">
+              <el-select v-model="createForm.priority" style="width: 100%">
+                <el-option label="低" value="low" />
+                <el-option label="中" value="medium" />
+                <el-option label="高" value="high" />
+                <el-option label="紧急" value="urgent" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="负责人" prop="assigned_to">
+              <el-select v-model="createForm.assigned_to" style="width: 100%">
+                <el-option
+                  v-for="user in users"
+                  :key="user.id"
+                  :label="user.username"
+                  :value="user.id"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+      </el-form>
+      
+      <template #footer>
+        <el-button @click="showCreateDialog = false">取消</el-button>
+        <el-button type="primary" @click="createTask" :loading="creating">
+          创建
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
-<script setup lang="ts">
-import { ref, reactive, computed, onMounted, nextTick } from 'vue'
-import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import {
-  Calendar,
-  Refresh,
-  Plus
-} from '@element-plus/icons-vue'
-import dayjs from 'dayjs'
-import { useTasksStore } from '@/stores/tasks'
-import TaskCreateDialog from '@/components/tasks/TaskCreateDialog.vue'
-import type { Task } from '@/types/task'
-
-const router = useRouter()
-const tasksStore = useTasksStore()
+<script setup>
+import { ref, reactive, onMounted, onUnmounted, nextTick } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Calendar, Refresh, Plus, Download, ArrowDown, Picture, Document, Grid } from '@element-plus/icons-vue'
+import { gantt } from 'dhtmlx-gantt'
+import 'dhtmlx-gantt/codebase/dhtmlxgantt.css'
+import api from '@/api'
+import * as XLSX from 'xlsx'
 
 // 响应式数据
-const loading = ref(false)
+const ganttContainer = ref(null)
 const showCreateDialog = ref(false)
-const showTaskDetail = ref(false)
-const selectedTask = ref<Task | null>(null)
-const viewMode = ref<'day' | 'week' | 'month'>('week')
-const dateRange = ref<[string, string] | null>(null)
-const cellWidth = ref(60)
+const creating = ref(false)
+const viewMode = ref('week')
+const dateRange = ref([])
+const projects = ref([])
+const users = ref([])
 
+// 筛选器
 const filters = reactive({
-  assignee: '',
-  priority: '',
-  status: ''
+  project_id: null,
+  assignee: null
 })
 
-// 模拟用户数据
-const users = ref([
-  { id: '1', real_name: '张三' },
-  { id: '2', real_name: '李四' },
-  { id: '3', real_name: '王五' }
-])
-
-// 计算属性
-const filteredTasks = computed(() => {
-  let tasks = tasksStore.tasks.filter(task => task.start_date && task.due_date)
-  
-  if (filters.assignee) {
-    tasks = tasks.filter(task => task.assignee?.id === filters.assignee)
-  }
-  
-  if (filters.priority) {
-    tasks = tasks.filter(task => task.priority === filters.priority)
-  }
-  
-  if (filters.status) {
-    tasks = tasks.filter(task => task.status === filters.status)
-  }
-  
-  if (dateRange.value) {
-    const [start, end] = dateRange.value
-    tasks = tasks.filter(task => {
-      const taskStart = dayjs(task.start_date)
-      const taskEnd = dayjs(task.due_date)
-      const rangeStart = dayjs(start)
-      const rangeEnd = dayjs(end)
-      
-      return taskStart.isBefore(rangeEnd) && taskEnd.isAfter(rangeStart)
-    })
-  }
-  
-  return tasks.sort((a, b) => dayjs(a.start_date).diff(dayjs(b.start_date)))
+// 创建表单
+const createForm = reactive({
+  title: '',
+  description: '',
+  start_date: '',
+  end_date: '',
+  priority: 'medium',
+  assigned_to: null
 })
 
-// 时间轴数据
-const timelineData = computed(() => {
-  const data = []
-  const today = dayjs()
-  const startDate = today.subtract(30, 'day')
-  const endDate = today.add(60, 'day')
+const createFormRef = ref(null)
+
+// 表单验证规则
+const createRules = {
+  title: [
+    { required: true, message: '请输入任务标题', trigger: 'blur' }
+  ],
+  start_date: [
+    { required: true, message: '请选择开始时间', trigger: 'change' }
+  ],
+  end_date: [
+    { required: true, message: '请选择结束时间', trigger: 'change' }
+  ]
+}
+
+// 初始化甘特图
+const initGantt = () => {
+  // 配置甘特图
+  gantt.config.date_format = '%Y-%m-%d %H:%i:%s'
+  gantt.config.xml_date = '%Y-%m-%d %H:%i:%s'
+  gantt.config.scale_unit = 'day'
+  gantt.config.date_scale = '%m/%d'
+  gantt.config.subscales = [
+    { unit: 'hour', step: 1, date: '%H' }
+  ]
+  gantt.config.duration_unit = 'day'
+  gantt.config.duration_step = 1
   
-  let current = startDate
+  // 启用拖拽和调整大小
+  gantt.config.drag_timeline = {
+    useKey: false,
+    ignore: '.gantt_task_line, .gantt_task_link'
+  }
+  gantt.config.drag_resize = true
+  gantt.config.drag_progress = true
+  gantt.config.drag_links = true
   
-  while (current.isBefore(endDate)) {
-    if (viewMode.value === 'day') {
-      data.push({
-        key: current.format('YYYY-MM-DD'),
-        label: current.format('MM-DD'),
-        subLabel: current.format('ddd'),
-        date: current.toDate()
-      })
-      current = current.add(1, 'day')
-    } else if (viewMode.value === 'week') {
-      data.push({
-        key: current.format('YYYY-WW'),
-        label: current.format('MM-DD'),
-        subLabel: `第${current.week()}周`,
-        date: current.toDate()
-      })
-      current = current.add(1, 'week')
-    } else {
-      data.push({
-        key: current.format('YYYY-MM'),
-        label: current.format('YYYY-MM'),
-        subLabel: current.format('MMM'),
-        date: current.toDate()
-      })
-      current = current.add(1, 'month')
+  // 启用依赖关系
+  gantt.config.show_links = true
+  
+  // 自定义列
+  gantt.config.columns = [
+    { name: 'text', label: '任务名称', width: 200, tree: true },
+    { name: 'assignee_name', label: '负责人', width: 100, align: 'center' },
+    { name: 'priority', label: '优先级', width: 80, align: 'center' },
+    { name: 'progress', label: '进度', width: 80, align: 'center' },
+    { name: 'start_date', label: '开始时间', width: 100, align: 'center' },
+    { name: 'duration', label: '工期', width: 60, align: 'center' }
+  ]
+  
+  // 自定义任务条颜色
+  gantt.templates.task_class = function(start, end, task) {
+    switch(task.priority) {
+      case 'urgent': return 'gantt-urgent'
+      case 'high': return 'gantt-high'
+      case 'medium': return 'gantt-medium'
+      case 'low': return 'gantt-low'
+      default: return 'gantt-medium'
     }
   }
   
-  return data
-})
-
-// 今日位置
-const todayPosition = computed(() => {
-  const today = dayjs()
-  const startDate = dayjs().subtract(30, 'day')
-  
-  let daysDiff = 0
-  if (viewMode.value === 'day') {
-    daysDiff = today.diff(startDate, 'day')
-  } else if (viewMode.value === 'week') {
-    daysDiff = today.diff(startDate, 'week')
-  } else {
-    daysDiff = today.diff(startDate, 'month')
+  // 自定义进度显示
+  gantt.templates.progress_text = function(start, end, task) {
+    return Math.round(task.progress * 100) + '%'
   }
   
-  return daysDiff * cellWidth.value
-})
-
-// 获取状态类型
-const getStatusType = (status: string) => {
-  const types = {
-    pending: 'info',
-    in_progress: 'warning',
-    completed: 'success',
-    cancelled: 'danger'
-  }
-  return types[status] || ''
-}
-
-// 获取状态文本
-const getStatusText = (status: string) => {
-  const texts = {
-    pending: '待处理',
-    in_progress: '进行中',
-    completed: '已完成',
-    cancelled: '已取消'
-  }
-  return texts[status] || status
-}
-
-// 获取优先级类型
-const getPriorityType = (priority: string) => {
-  const types = {
-    low: '',
-    medium: 'warning',
-    high: 'danger',
-    urgent: 'danger'
-  }
-  return types[priority] || ''
-}
-
-// 获取优先级文本
-const getPriorityText = (priority: string) => {
-  const texts = {
-    low: '低',
-    medium: '中',
-    high: '高',
-    urgent: '紧急'
-  }
-  return texts[priority] || priority
-}
-
-// 计算工期
-const calculateDuration = (startDate: string, endDate: string) => {
-  if (!startDate || !endDate) return 0
-  return dayjs(endDate).diff(dayjs(startDate), 'day') + 1
-}
-
-// 检查是否逾期
-const isOverdue = (dueDate: string) => {
-  return dayjs(dueDate).isBefore(dayjs(), 'day')
-}
-
-// 格式化日期
-const formatDate = (date: string) => {
-  if (!date) return ''
-  return dayjs(date).format('YYYY-MM-DD')
-}
-
-// 获取甘特条样式
-const getBarStyle = (task: Task) => {
-  const startDate = dayjs(task.start_date)
-  const endDate = dayjs(task.due_date)
-  const timelineStart = dayjs().subtract(30, 'day')
+  // 事件监听
+  gantt.attachEvent('onAfterTaskDrag', function(id, mode, e) {
+    const task = gantt.getTask(id)
+    updateTaskDates(task)
+  })
   
-  let startOffset = 0
-  let duration = 0
+  gantt.attachEvent('onAfterProgressDrag', function(id, progress) {
+    const task = gantt.getTask(id)
+    task.progress = progress
+    updateTaskProgress(task)
+  })
   
-  if (viewMode.value === 'day') {
-    startOffset = startDate.diff(timelineStart, 'day')
-    duration = endDate.diff(startDate, 'day') + 1
-  } else if (viewMode.value === 'week') {
-    startOffset = startDate.diff(timelineStart, 'week')
-    duration = Math.max(1, endDate.diff(startDate, 'week') + 1)
-  } else {
-    startOffset = startDate.diff(timelineStart, 'month')
-    duration = Math.max(1, endDate.diff(startDate, 'month') + 1)
-  }
+  gantt.attachEvent('onAfterLinkAdd', function(id, link) {
+    createTaskDependency(link)
+  })
   
-  return {
-    left: startOffset * cellWidth.value + 'px',
-    width: duration * cellWidth.value - 4 + 'px'
-  }
+  gantt.attachEvent('onAfterLinkDelete', function(id, link) {
+    deleteTaskDependency(link.id)
+  })
+  
+  // 初始化甘特图
+  gantt.init(ganttContainer.value)
 }
 
 // 设置视图模式
-const setViewMode = (mode: 'day' | 'week' | 'month') => {
+const setViewMode = (mode) => {
   viewMode.value = mode
   
-  // 调整单元格宽度
-  if (mode === 'day') {
-    cellWidth.value = 40
-  } else if (mode === 'week') {
-    cellWidth.value = 60
-  } else {
-    cellWidth.value = 80
+  switch(mode) {
+    case 'day':
+      gantt.config.scale_unit = 'day'
+      gantt.config.date_scale = '%m/%d'
+      gantt.config.subscales = [
+        { unit: 'hour', step: 6, date: '%H:00' }
+      ]
+      break
+    case 'week':
+      gantt.config.scale_unit = 'week'
+      gantt.config.date_scale = '第%W周'
+      gantt.config.subscales = [
+        { unit: 'day', step: 1, date: '%d' }
+      ]
+      break
+    case 'month':
+      gantt.config.scale_unit = 'month'
+      gantt.config.date_scale = '%Y年%m月'
+      gantt.config.subscales = [
+        { unit: 'week', step: 1, date: '第%W周' }
+      ]
+      break
   }
+  
+  gantt.render()
 }
 
 // 跳转到今天
 const goToToday = () => {
-  // TODO: 滚动到今天的位置
-  ElMessage.success('已跳转到今天')
-}
-
-// 选择任务
-const selectTask = (task: Task) => {
-  selectedTask.value = task
-  showTaskDetail.value = true
-}
-
-// 编辑任务
-const editTask = (task: Task) => {
-  router.push(`/tasks/${task.id}/edit`)
-}
-
-// 查看任务详情
-const viewTaskDetail = (task: Task) => {
-  router.push(`/tasks/${task.id}`)
-}
-
-// 处理筛选
-const handleFilter = () => {
-  // 筛选逻辑已在计算属性中处理
-}
-
-// 处理日期范围变化
-const handleDateRangeChange = () => {
-  // 日期范围筛选逻辑已在计算属性中处理
-}
-
-// 重置筛选器
-const resetFilters = () => {
-  Object.assign(filters, {
-    assignee: '',
-    priority: '',
-    status: ''
-  })
-  dateRange.value = null
+  gantt.showDate(new Date())
 }
 
 // 刷新数据
-const refreshData = async () => {
-  await fetchTasks()
-  ElMessage.success('数据已刷新')
+const refreshData = () => {
+  loadGanttData()
 }
 
-// 处理创建成功
-const handleCreateSuccess = () => {
-  showCreateDialog.value = false
-  fetchTasks()
-}
-
-// 获取任务列表
-const fetchTasks = async () => {
-  loading.value = true
+// 加载甘特图数据
+const loadGanttData = async () => {
   try {
-    await tasksStore.fetchTasks()
+    const params = {}
+    
+    if (filters.project_id) {
+      params.project_id = filters.project_id
+    }
+    
+    if (dateRange.value && dateRange.value.length === 2) {
+      params.start_date = dateRange.value[0].toISOString().split('T')[0]
+      params.end_date = dateRange.value[1].toISOString().split('T')[0]
+    }
+    
+    const response = await api.get('/tasks/gantt/data', { params })
+    
+    if (response.data.success) {
+      const { tasks, dependencies } = response.data.data
+      
+      // 转换任务数据格式
+      const ganttTasks = tasks.map(task => ({
+        id: task.id,
+        text: task.title,
+        start_date: task.start_date,
+        end_date: task.end_date,
+        duration: calculateDuration(task.start_date, task.end_date),
+        progress: task.progress / 100,
+        priority: task.priority,
+        status: task.status,
+        assignee_name: task.assignee_name || '未分配',
+        parent: task.parent_task_id || 0
+      }))
+      
+      // 转换依赖关系数据格式
+      const ganttLinks = dependencies.map(dep => ({
+        id: dep.id,
+        source: dep.predecessor_task_id,
+        target: dep.successor_task_id,
+        type: convertDependencyType(dep.dependency_type)
+      }))
+      
+      // 清空并加载数据
+      gantt.clearAll()
+      gantt.parse({
+        data: ganttTasks,
+        links: ganttLinks
+      })
+    }
   } catch (error) {
-    ElMessage.error('获取任务列表失败')
-  } finally {
-    loading.value = false
+    console.error('加载甘特图数据失败:', error)
+    ElMessage.error('加载甘特图数据失败')
   }
 }
 
-onMounted(() => {
-  fetchTasks()
+// 计算工期
+const calculateDuration = (startDate, endDate) => {
+  if (!startDate || !endDate) return 1
+  const start = new Date(startDate)
+  const end = new Date(endDate)
+  const diffTime = Math.abs(end - start)
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+  return diffDays || 1
+}
+
+// 转换依赖关系类型
+const convertDependencyType = (type) => {
+  const typeMap = {
+    'finish_to_start': '0',
+    'start_to_start': '1',
+    'finish_to_finish': '2',
+    'start_to_finish': '3'
+  }
+  return typeMap[type] || '0'
+}
+
+// 更新任务时间
+const updateTaskDates = async (task) => {
+  try {
+    const updates = [{
+      id: task.id,
+      start_date: gantt.date.date_to_str('%Y-%m-%d')(task.start_date),
+      end_date: gantt.date.date_to_str('%Y-%m-%d')(task.end_date)
+    }]
+    
+    await api.put('/tasks/gantt/batch-update', { updates })
+    ElMessage.success('任务时间更新成功')
+  } catch (error) {
+    console.error('更新任务时间失败:', error)
+    ElMessage.error('更新任务时间失败')
+    loadGanttData() // 重新加载数据
+  }
+}
+
+// 更新任务进度
+const updateTaskProgress = async (task) => {
+  try {
+    const updates = [{
+      id: task.id,
+      progress: Math.round(task.progress * 100)
+    }]
+    
+    await api.put('/tasks/gantt/batch-update', { updates })
+    ElMessage.success('任务进度更新成功')
+  } catch (error) {
+    console.error('更新任务进度失败:', error)
+    ElMessage.error('更新任务进度失败')
+    loadGanttData() // 重新加载数据
+  }
+}
+
+// 创建任务依赖关系
+const createTaskDependency = async (link) => {
+  try {
+    await api.post('/task-dependencies', {
+      predecessor_task_id: link.source,
+      successor_task_id: link.target,
+      dependency_type: 'finish_to_start'
+    })
+    ElMessage.success('依赖关系创建成功')
+  } catch (error) {
+    console.error('创建依赖关系失败:', error)
+    ElMessage.error('创建依赖关系失败')
+    gantt.deleteLink(link.id) // 删除无效的连线
+  }
+}
+
+// 删除任务依赖关系
+const deleteTaskDependency = async (linkId) => {
+  try {
+    await api.delete(`/task-dependencies/${linkId}`)
+    ElMessage.success('依赖关系删除成功')
+  } catch (error) {
+    console.error('删除依赖关系失败:', error)
+    ElMessage.error('删除依赖关系失败')
+  }
+}
+
+// 创建任务
+const createTask = async () => {
+  if (!createFormRef.value) return
+  
+  try {
+    await createFormRef.value.validate()
+    creating.value = true
+    
+    const taskData = {
+      ...createForm,
+      start_date: createForm.start_date.toISOString().split('T')[0],
+      end_date: createForm.end_date.toISOString().split('T')[0]
+    }
+    
+    await api.post('/tasks', taskData)
+    
+    ElMessage.success('任务创建成功')
+    showCreateDialog.value = false
+    resetCreateForm()
+    loadGanttData()
+  } catch (error) {
+    console.error('创建任务失败:', error)
+    ElMessage.error('创建任务失败')
+  } finally {
+    creating.value = false
+  }
+}
+
+// 重置创建表单
+const resetCreateForm = () => {
+  Object.assign(createForm, {
+    title: '',
+    description: '',
+    start_date: '',
+    end_date: '',
+    priority: 'medium',
+    assigned_to: null
+  })
+  
+  if (createFormRef.value) {
+    createFormRef.value.clearValidate()
+  }
+}
+
+// 加载用户列表
+const loadUsers = async () => {
+  try {
+    const response = await api.get('/users')
+    if (response.data.success) {
+      users.value = response.data.data
+    }
+  } catch (error) {
+    console.error('加载用户列表失败:', error)
+  }
+}
+
+// 加载项目列表
+const loadProjects = async () => {
+  try {
+    // 这里需要根据实际的项目API调整
+    // const response = await api.get('/projects')
+    // if (response.data.success) {
+    //   projects.value = response.data.data
+    // }
+    
+    // 临时模拟数据
+    projects.value = [
+      { id: 1, name: '项目A' },
+      { id: 2, name: '项目B' },
+      { id: 3, name: '项目C' }
+    ]
+  } catch (error) {
+    console.error('加载项目列表失败:', error)
+  }
+}
+
+// 处理导出
+const handleExport = async (command) => {
+  try {
+    switch (command) {
+      case 'png':
+        await exportToPNG()
+        break
+      case 'pdf':
+        await exportToPDF()
+        break
+      case 'excel':
+        await exportToExcel()
+        break
+    }
+  } catch (error) {
+    console.error('导出失败:', error)
+    ElMessage.error('导出失败，请重试')
+  }
+}
+
+// 导出为PNG图片
+const exportToPNG = () => {
+  return new Promise((resolve, reject) => {
+    try {
+      gantt.exportToPNG({
+        name: `甘特图_${new Date().toISOString().split('T')[0]}.png`,
+        header: '<div style="text-align: center; font-size: 18px; font-weight: bold; padding: 10px;">项目甘特图</div>',
+        footer: '<div style="text-align: center; font-size: 12px; color: #666; padding: 5px;">导出时间: ' + new Date().toLocaleString() + '</div>',
+        callback: function(result) {
+          if (result.url) {
+            // 创建下载链接
+            const link = document.createElement('a')
+            link.href = result.url
+            link.download = `甘特图_${new Date().toISOString().split('T')[0]}.png`
+            document.body.appendChild(link)
+            link.click()
+            document.body.removeChild(link)
+            ElMessage.success('图片导出成功')
+            resolve()
+          } else {
+            reject(new Error('导出失败'))
+          }
+        }
+      })
+    } catch (error) {
+      reject(error)
+    }
+  })
+}
+
+// 导出为PDF
+const exportToPDF = () => {
+  return new Promise((resolve, reject) => {
+    try {
+      gantt.exportToPDF({
+        name: `甘特图_${new Date().toISOString().split('T')[0]}.pdf`,
+        header: '<div style="text-align: center; font-size: 18px; font-weight: bold; padding: 10px;">项目甘特图</div>',
+        footer: '<div style="text-align: center; font-size: 12px; color: #666; padding: 5px;">导出时间: ' + new Date().toLocaleString() + '</div>',
+        format: 'A4',
+        orientation: 'landscape',
+        callback: function(result) {
+          if (result.url) {
+            // 创建下载链接
+            const link = document.createElement('a')
+            link.href = result.url
+            link.download = `甘特图_${new Date().toISOString().split('T')[0]}.pdf`
+            document.body.appendChild(link)
+            link.click()
+            document.body.removeChild(link)
+            ElMessage.success('PDF导出成功')
+            resolve()
+          } else {
+            reject(new Error('导出失败'))
+          }
+        }
+      })
+    } catch (error) {
+      reject(error)
+    }
+  })
+}
+
+// 导出为Excel
+const exportToExcel = () => {
+  try {
+    const tasks = gantt.serialize().data
+    
+    // 准备Excel数据
+    const excelData = tasks.map(task => ({
+      '任务ID': task.id,
+      '任务名称': task.text,
+      '负责人': task.assignee_name || '未分配',
+      '优先级': task.priority,
+      '开始时间': gantt.date.date_to_str('%Y-%m-%d')(task.start_date),
+      '结束时间': gantt.date.date_to_str('%Y-%m-%d')(task.end_date),
+      '工期(天)': task.duration,
+      '进度(%)': Math.round(task.progress * 100),
+      '状态': task.status
+    }))
+    
+    // 创建工作簿
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.json_to_sheet(excelData)
+    
+    // 设置列宽
+    const colWidths = [
+      { wch: 10 }, // 任务ID
+      { wch: 30 }, // 任务名称
+      { wch: 15 }, // 负责人
+      { wch: 10 }, // 优先级
+      { wch: 15 }, // 开始时间
+      { wch: 15 }, // 结束时间
+      { wch: 12 }, // 工期
+      { wch: 12 }, // 进度
+      { wch: 10 }  // 状态
+    ]
+    ws['!cols'] = colWidths
+    
+    // 添加工作表
+    XLSX.utils.book_append_sheet(wb, ws, '甘特图数据')
+    
+    // 导出文件
+    const fileName = `甘特图数据_${new Date().toISOString().split('T')[0]}.xlsx`
+    XLSX.writeFile(wb, fileName)
+    
+    ElMessage.success('Excel导出成功')
+  } catch (error) {
+    console.error('Excel导出失败:', error)
+    ElMessage.error('Excel导出失败')
+  }
+}
+
+// 生命周期
+onMounted(async () => {
+  await nextTick()
+  initGantt()
+  await Promise.all([
+    loadUsers(),
+    loadProjects(),
+    loadGanttData()
+  ])
+})
+
+onUnmounted(() => {
+  if (gantt) {
+    gantt.destructor()
+  }
 })
 </script>
 
 <style scoped>
 .gantt-view {
-  padding: 20px;
-  height: calc(100vh - 120px);
+  height: 100vh;
   display: flex;
   flex-direction: column;
 }
 
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  background: #fff;
+  border-bottom: 1px solid #e4e7ed;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
 .filter-card {
-  margin-bottom: 20px;
+  margin: 16px 24px;
 }
 
 .filter-row {
   display: flex;
-  gap: 16px;
+  gap: 20px;
   align-items: center;
   flex-wrap: wrap;
 }
 
 .filter-item {
-  min-width: 150px;
-}
-
-.filter-item:last-child {
-  min-width: auto;
-}
-
-.gantt-card {
-  flex: 1;
-  overflow: hidden;
-}
-
-.gantt-container {
-  display: flex;
-  height: 100%;
-}
-
-.task-list-panel {
-  width: 400px;
-  border-right: 1px solid var(--el-border-color-lighter);
-  display: flex;
-  flex-direction: column;
-}
-
-.task-list-header {
-  display: flex;
-  background: var(--el-fill-color-light);
-  border-bottom: 1px solid var(--el-border-color-lighter);
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-}
-
-.header-cell {
-  padding: 12px 8px;
-  border-right: 1px solid var(--el-border-color-lighter);
-}
-
-.header-cell.task-name {
-  flex: 1;
-  min-width: 200px;
-}
-
-.header-cell.assignee {
-  width: 80px;
-}
-
-.header-cell.duration {
-  width: 60px;
-}
-
-.header-cell.progress {
-  width: 80px;
-}
-
-.task-list-body {
-  flex: 1;
-  overflow-y: auto;
-}
-
-.task-row {
-  display: flex;
-  border-bottom: 1px solid var(--el-border-color-lighter);
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.task-row:hover,
-.task-row.task-selected {
-  background-color: var(--el-color-primary-light-9);
-}
-
-.task-cell {
-  padding: 12px 8px;
-  border-right: 1px solid var(--el-border-color-lighter);
-  display: flex;
-  align-items: center;
-}
-
-.task-cell.task-name {
-  flex: 1;
-  min-width: 200px;
-}
-
-.task-cell.assignee {
-  width: 80px;
-}
-
-.task-cell.duration {
-  width: 60px;
-  justify-content: center;
-}
-
-.task-cell.progress {
-  width: 80px;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.task-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.task-title {
-  font-weight: 500;
-  color: var(--el-text-color-primary);
-}
-
-.task-meta {
-  display: flex;
-  gap: 4px;
-}
-
-.assignee-info {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.assignee-name {
-  font-size: 12px;
-}
-
-.unassigned {
-  font-size: 12px;
-  color: var(--el-text-color-placeholder);
-  font-style: italic;
-}
-
-.progress-text {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-
-.gantt-chart-panel {
-  flex: 1;
-  overflow-x: auto;
-  display: flex;
-  flex-direction: column;
-}
-
-.timeline-header {
-  border-bottom: 1px solid var(--el-border-color-lighter);
-  background: var(--el-fill-color-light);
-}
-
-.timeline-scale {
-  display: flex;
-}
-
-.timeline-cell {
-  border-right: 1px solid var(--el-border-color-lighter);
-  padding: 8px 4px;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.timeline-date {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--el-text-color-primary);
-}
-
-.timeline-sub {
-  font-size: 10px;
-  color: var(--el-text-color-secondary);
-}
-
-.gantt-bars {
-  flex: 1;
-  overflow-y: auto;
-}
-
-.gantt-row {
-  height: 60px;
-  border-bottom: 1px solid var(--el-border-color-lighter);
-  position: relative;
-  transition: background-color 0.2s;
-}
-
-.gantt-row:hover,
-.gantt-row.gantt-selected {
-  background-color: var(--el-color-primary-light-9);
-}
-
-.today-line {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: var(--el-color-danger);
-  z-index: 10;
-}
-
-.gantt-bar {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  height: 24px;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s;
-  z-index: 5;
-}
-
-.gantt-bar.priority-low {
-  background: var(--el-color-info-light-3);
-  border: 1px solid var(--el-color-info);
-}
-
-.gantt-bar.priority-medium {
-  background: var(--el-color-warning-light-3);
-  border: 1px solid var(--el-color-warning);
-}
-
-.gantt-bar.priority-high,
-.gantt-bar.priority-urgent {
-  background: var(--el-color-danger-light-3);
-  border: 1px solid var(--el-color-danger);
-}
-
-.gantt-bar.status-completed {
-  background: var(--el-color-success-light-3);
-  border: 1px solid var(--el-color-success);
-}
-
-.gantt-bar.overdue {
-  background: var(--el-color-danger-light-5);
-  border: 2px solid var(--el-color-danger);
-}
-
-.gantt-bar:hover {
-  transform: translateY(-50%) scale(1.05);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-}
-
-.bar-content {
-  position: relative;
-  height: 100%;
-  overflow: hidden;
-  border-radius: 3px;
-}
-
-.bar-progress {
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 100%;
-  background: rgba(255, 255, 255, 0.3);
-  border-radius: 3px;
-}
-
-.bar-text {
-  position: absolute;
-  top: 50%;
-  left: 8px;
-  transform: translateY(-50%);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--el-text-color-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: calc(100% - 16px);
-}
-
-.task-detail-content {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.detail-section h3 {
-  margin: 0 0 12px 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-}
-
-.detail-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.detail-item label {
-  font-size: 14px;
-  color: var(--el-text-color-secondary);
-  min-width: 80px;
-}
-
-.assignee-detail {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.detail-actions {
-  display: flex;
-  gap: 12px;
-  margin-top: 20px;
+.filter-item label {
+  font-weight: 500;
+  color: #606266;
+  white-space: nowrap;
 }
 
-@media (max-width: 768px) {
-  .gantt-container {
-    flex-direction: column;
-  }
-  
-  .task-list-panel {
-    width: 100%;
-    max-height: 300px;
-    border-right: none;
-    border-bottom: 1px solid var(--el-border-color-lighter);
-  }
-  
-  .filter-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  
-  .filter-item {
-    min-width: auto;
-  }
+.gantt-container {
+  flex: 1;
+  margin: 0 24px 24px;
+  background: #fff;
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+}
+
+.gantt-chart {
+  height: 100%;
+  width: 100%;
+}
+</style>
+
+<style>
+/* 甘特图自定义样式 */
+.gantt-urgent .gantt_task_progress {
+  background: #f56565 !important;
+}
+
+.gantt-high .gantt_task_progress {
+  background: #ed8936 !important;
+}
+
+.gantt-medium .gantt_task_progress {
+  background: #4299e1 !important;
+}
+
+.gantt-low .gantt_task_progress {
+  background: #48bb78 !important;
+}
+
+.gantt_task_line.gantt-urgent {
+  border-color: #f56565;
+  background: rgba(245, 101, 101, 0.1);
+}
+
+.gantt_task_line.gantt-high {
+  border-color: #ed8936;
+  background: rgba(237, 137, 54, 0.1);
+}
+
+.gantt_task_line.gantt-medium {
+  border-color: #4299e1;
+  background: rgba(66, 153, 225, 0.1);
+}
+
+.gantt_task_line.gantt-low {
+  border-color: #48bb78;
+  background: rgba(72, 187, 120, 0.1);
+}
+
+/* 甘特图容器样式调整 */
+.gantt_container {
+  font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', '微软雅黑', Arial, sans-serif;
+}
+
+.gantt_grid_scale .gantt_grid_head_cell,
+.gantt_task_scale .gantt_scale_cell {
+  font-weight: 500;
+  color: #303133;
+}
+
+.gantt_task_cell,
+.gantt_cell {
+  border-color: #ebeef5;
+}
+
+.gantt_grid_data .gantt_row:nth-child(odd) {
+  background: #fafafa;
+}
+
+.gantt_grid_data .gantt_row:hover {
+  background: #f5f7fa;
 }
 </style>

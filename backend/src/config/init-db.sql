@@ -79,6 +79,25 @@ CREATE TABLE IF NOT EXISTS task_logs (
   INDEX idx_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='任务操作日志表';
 
+-- 任务依赖关系表
+CREATE TABLE IF NOT EXISTS task_dependencies (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  predecessor_id INT NOT NULL COMMENT '前置任务ID',
+  successor_id INT NOT NULL COMMENT '后续任务ID',
+  dependency_type ENUM('finish_to_start', 'start_to_start', 'finish_to_finish', 'start_to_finish') DEFAULT 'finish_to_start' COMMENT '依赖类型',
+  lag_days INT DEFAULT 0 COMMENT '滞后天数',
+  created_by INT NOT NULL COMMENT '创建人ID',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  FOREIGN KEY (predecessor_id) REFERENCES tasks(id) ON DELETE CASCADE,
+  FOREIGN KEY (successor_id) REFERENCES tasks(id) ON DELETE CASCADE,
+  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE KEY uk_dependency (predecessor_id, successor_id),
+  INDEX idx_predecessor (predecessor_id),
+  INDEX idx_successor (successor_id),
+  INDEX idx_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='任务依赖关系表';
+
 -- 文件表
 CREATE TABLE IF NOT EXISTS files (
   id INT PRIMARY KEY AUTO_INCREMENT,

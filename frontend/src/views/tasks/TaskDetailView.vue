@@ -34,11 +34,11 @@
           <h1 class="page-title">{{ task.title }}</h1>
         </div>
         <div class="header-actions">
-          <el-button @click="showEditDialog = true">
+          <el-button v-if="canEdit" @click="showEditDialog = true">
             <el-icon><Edit /></el-icon>
             编辑
           </el-button>
-          <el-button type="danger" @click="deleteTask">
+          <el-button v-if="canDelete" type="danger" @click="deleteTask">
             <el-icon><Delete /></el-icon>
             删除
           </el-button>
@@ -165,7 +165,15 @@
         </div>
         
         <!-- 右侧内容 -->
-        <div class="task-right">
+        <div class="task-detail-right">
+          <!-- 里程碑时间轴 -->
+          <div class="milestone-section">
+            <MilestoneTimeline 
+              :task-id="route.params.id as string" 
+              @milestone-updated="handleMilestoneUpdated"
+            />
+          </div>
+
           <!-- 操作历史 -->
           <el-card class="history-card">
             <template #header>
@@ -275,12 +283,15 @@ import {
 import dayjs from 'dayjs'
 import { useTasksStore } from '@/stores/tasks'
 import TaskEditDialog from '@/components/tasks/TaskEditDialog.vue'
+import MilestoneTimeline from '@/components/milestones/MilestoneTimeline.vue'
 import type { Task, TaskComment, TaskHistory } from '@/types/task'
 import { taskApi } from '@/api/tasks'
+import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
 const router = useRouter()
 const tasksStore = useTasksStore()
+const authStore = useAuthStore()
 
 // 响应式数据
 const loading = ref(false)
@@ -351,9 +362,12 @@ const getTypeText = (category: string) => {
   const textMap: Record<string, string> = {
     production_coordination: '生产协调',
     project_management: '项目管理',
-    general_work: '综合工作'
+    general_work: '综合工作',
+    '生产协调': '生产协调',
+    '项目管理': '项目管理',
+    '综合工作': '综合工作'
   }
-  return textMap[category] || '未知类型'
+  return textMap[category] || category || '未知类型'
 }
 
 // 获取截止日期样式
@@ -429,6 +443,11 @@ const handleEditSuccess = () => {
   fetchTaskDetail()
 }
 
+// 处理里程碑更新
+const handleMilestoneUpdated = () => {
+  fetchTaskDetail()
+}
+
 const fetchComments = async (taskId: string) => {
   try {
     const res = await taskApi.getTaskComments(taskId)
@@ -459,7 +478,13 @@ const fetchTaskDetail = async () => {
     // 获取评论和历史记录
     fetchComments(taskId)
     fetchHistory(taskId)
-  } catch (error) {
+  } catch (error: any) {
+    // 如果接口返回403但用户是经理/管理员，仍允许展示详情（后端已放开，这里仅兜底）
+    const isManagerOrAbove = authStore.isManager || authStore.isAdmin || authStore.isSuperAdmin
+    if (error?.response?.status === 403 && isManagerOrAbove) {
+      // 静默处理，不弹全局无权限提示
+      return
+    }
     ElMessage.error('获取任务详情失败')
   } finally {
     loading.value = false
@@ -469,6 +494,34 @@ const fetchTaskDetail = async () => {
 onMounted(() => {
   fetchTaskDetail()
 })
+
+// 根据用户角色和任务所有权判断是否可编辑
+const canEdit = computed(() => {
+  const t = task.value;
+  const u = authStore.user;
+  if (!t || !u) return false;
+
+  if (authStore.isAdmin || authStore.isSuperAdmin || authStore.isManager) {
+    return true;
+  }
+
+  const assigneeId = (t as any).assignee_id ?? (t as any).assigned_to ?? (t as any).assignee?.id;
+  return String(u.id) === String(assigneeId);
+});
+
+// 根据用户角色和任务所有权判断是否可删除
+const canDelete = computed(() => {
+  const t = task.value;
+  const u = authStore.user;
+  if (!t || !u) return false;
+
+  if (authStore.isAdmin || authStore.isSuperAdmin) {
+    return true;
+  }
+
+  const creatorId = (t as any).creator_id ?? (t as any).created_by ?? (t as any).creator?.id;
+  return String(u.id) === String(creatorId);
+});
 </script>
 
 <style scoped>
@@ -499,10 +552,14 @@ onMounted(() => {
   gap: 20px;
 }
 
-.task-right {
+.task-detail-right {
   display: flex;
   flex-direction: column;
   gap: 20px;
+}
+
+.milestone-section {
+  margin-bottom: 24px;
 }
 
 .info-grid {

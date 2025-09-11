@@ -14,11 +14,13 @@
     "@element-plus/icons-vue": "^2.3.1",
     "axios": "^1.6.2",
     "dayjs": "^1.11.10",
+    "dhtmlx-gantt": "^9.0.14",
     "echarts": "^6.0.0",
     "element-plus": "^2.4.4",
     "pinia": "^2.1.7",
     "vue": "^3.4.0",
-    "vue-router": "^4.2.5"
+    "vue-router": "^4.2.5",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^4.5.2",
