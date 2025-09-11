@@ -261,6 +261,10 @@ const createRules = {
 
 // 初始化甘特图
 const initGantt = () => {
+  // 清除之前的配置和事件监听器
+  gantt.clearAll()
+  gantt.detachAllEvents()
+  
   // 配置甘特图
   gantt.config.date_format = '%Y-%m-%d %H:%i:%s'
   gantt.config.xml_date = '%Y-%m-%d %H:%i:%s'
@@ -295,7 +299,7 @@ const initGantt = () => {
   ]
   
   // 自定义任务条颜色
-  gantt.templates.task_class = function(start, end, task) {
+  gantt.templates.task_class = (start, end, task) => {
     switch(task.priority) {
       case 'urgent': return 'gantt-urgent'
       case 'high': return 'gantt-high'
@@ -306,27 +310,27 @@ const initGantt = () => {
   }
   
   // 自定义进度显示
-  gantt.templates.progress_text = function(start, end, task) {
+  gantt.templates.progress_text = (start, end, task) => {
     return Math.round(task.progress * 100) + '%'
   }
   
   // 事件监听
-  gantt.attachEvent('onAfterTaskDrag', function(id, mode, e) {
+  gantt.attachEvent('onAfterTaskDrag', (id, mode, e) => {
     const task = gantt.getTask(id)
     updateTaskDates(task)
   })
   
-  gantt.attachEvent('onAfterProgressDrag', function(id, progress) {
+  gantt.attachEvent('onAfterProgressDrag', (id, progress) => {
     const task = gantt.getTask(id)
     task.progress = progress
     updateTaskProgress(task)
   })
   
-  gantt.attachEvent('onAfterLinkAdd', function(id, link) {
+  gantt.attachEvent('onAfterLinkAdd', (id, link) => {
     createTaskDependency(link)
   })
   
-  gantt.attachEvent('onAfterLinkDelete', function(id, link) {
+  gantt.attachEvent('onAfterLinkDelete', (id, link) => {
     deleteTaskDependency(link.id)
   })
   
@@ -751,6 +755,8 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (gantt) {
+    gantt.clearAll()
+    gantt.detachAllEvents()
     gantt.destructor()
   }
 })
