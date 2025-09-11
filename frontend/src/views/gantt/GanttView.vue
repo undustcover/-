@@ -261,14 +261,24 @@ const createRules = {
 
 // 初始化甘特图
 const initGantt = () => {
-  // 清除之前的配置和事件监听器（仅在已初始化时）
+  // 完全重置甘特图实例和容器
   try {
-    if (gantt.getTaskByTime) {
-      gantt.clearAll()
-      gantt.detachAllEvents()
+    if (gantt.destructor) {
+      gantt.destructor()
     }
   } catch (e) {
-    // 忽略清理错误，继续初始化
+    // 忽略销毁错误
+  }
+  
+  // 重新创建容器元素以确保完全重置
+  if (ganttContainer.value) {
+    const parent = ganttContainer.value.parentNode
+    const newContainer = document.createElement('div')
+    newContainer.id = 'gantt-container'
+    newContainer.style.width = '100%'
+    newContainer.style.height = '600px'
+    parent.replaceChild(newContainer, ganttContainer.value)
+    ganttContainer.value = newContainer
   }
   
   // 配置甘特图
