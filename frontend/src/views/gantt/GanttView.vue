@@ -261,9 +261,15 @@ const createRules = {
 
 // 初始化甘特图
 const initGantt = () => {
-  // 清除之前的配置和事件监听器
-  gantt.clearAll()
-  gantt.detachAllEvents()
+  // 清除之前的配置和事件监听器（仅在已初始化时）
+  try {
+    if (gantt.getTaskByTime) {
+      gantt.clearAll()
+      gantt.detachAllEvents()
+    }
+  } catch (e) {
+    // 忽略清理错误，继续初始化
+  }
   
   // 配置甘特图
   gantt.config.date_format = '%Y-%m-%d %H:%i:%s'
@@ -755,9 +761,15 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (gantt) {
-    gantt.clearAll()
-    gantt.detachAllEvents()
-    gantt.destructor()
+    try {
+      if (gantt.getTaskByTime) {
+        gantt.clearAll()
+        gantt.detachAllEvents()
+      }
+      gantt.destructor()
+    } catch (e) {
+      // 忽略清理错误
+    }
   }
 })
 </script>
