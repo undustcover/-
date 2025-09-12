@@ -224,6 +224,7 @@ const viewMode = ref('week')
 const dateRange = ref([])
 const projects = ref([])
 const users = ref([])
+const ganttEventIds = []
 
 // Store
 const tasksStore = useTasksStore()
@@ -261,27 +262,16 @@ const createRules = {
 
 // 初始化甘特图
 const initGantt = () => {
-  // 完全重置甘特图实例和容器
+  // 清除之前的配置和事件监听器（仅在已初始化时）
   try {
-    if (gantt.destructor) {
-      gantt.destructor()
+    if (gantt.getTaskByTime) { // Check if gantt is initialized
+      gantt.clearAll()
+      gantt.detachAllEvents()
     }
   } catch (e) {
-    // 忽略销毁错误
+    // 忽略清理错误，继续初始化
   }
-  
-  // 重新创建容器元素以确保完全重置
-  if (ganttContainer.value) {
-    const parent = ganttContainer.value.parentNode
-    const newContainer = document.createElement('div')
-    newContainer.id = 'gantt-container'
-    newContainer.style.width = '100%'
-    newContainer.style.height = '600px'
-    parent.replaceChild(newContainer, ganttContainer.value)
-    ganttContainer.value = newContainer
-  }
-  
-  // 配置甘特图
+
   gantt.config.date_format = '%Y-%m-%d %H:%i:%s'
   gantt.config.xml_date = '%Y-%m-%d %H:%i:%s'
   gantt.config.scale_unit = 'day'
@@ -331,24 +321,24 @@ const initGantt = () => {
   }
   
   // 事件监听
-  gantt.attachEvent('onAfterTaskDrag', (id, mode, e) => {
+  ganttEventIds.push(gantt.attachEvent('onAfterTaskDrag', (id, mode, e) => {
     const task = gantt.getTask(id)
     updateTaskDates(task)
-  })
+  }))
   
-  gantt.attachEvent('onAfterProgressDrag', (id, progress) => {
+  ganttEventIds.push(gantt.attachEvent('onAfterProgressDrag', (id, progress) => {
     const task = gantt.getTask(id)
     task.progress = progress
     updateTaskProgress(task)
-  })
+  }))
   
-  gantt.attachEvent('onAfterLinkAdd', (id, link) => {
+  ganttEventIds.push(gantt.attachEvent('onAfterLinkAdd', (id, link) => {
     createTaskDependency(link)
-  })
+  }))
   
-  gantt.attachEvent('onAfterLinkDelete', (id, link) => {
+  ganttEventIds.push(gantt.attachEvent('onAfterLinkDelete', (id, link) => {
     deleteTaskDependency(link.id)
-  })
+  }))
   
   // 初始化甘特图
   gantt.init(ganttContainer.value)
@@ -770,13 +760,13 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  // 卸载所有事件监听器
+  ganttEventIds.forEach(eventId => gantt.detachEvent(eventId))
+  ganttEventIds.length = 0 // 清空数组
+  
   if (gantt) {
     try {
-      if (gantt.getTaskByTime) {
-        gantt.clearAll()
-        gantt.detachAllEvents()
-      }
-      gantt.destructor()
+      gantt.clearAll()
     } catch (e) {
       // 忽略清理错误
     }

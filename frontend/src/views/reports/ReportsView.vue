@@ -323,6 +323,7 @@ import {
 } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import dayjs from 'dayjs'
+import api from '@/api'
 
 // 响应式数据
 const loading = ref(false)
@@ -349,71 +350,40 @@ let efficiencyChart: echarts.ECharts | null = null
 
 // 统计数据
 const stats = reactive({
-  totalTasks: 1248,
-  completedTasks: 892,
-  completionRate: 71.5,
-  overdueTasks: 45,
-  taskGrowth: 12.5,
-  completionGrowth: 8.3,
-  rateGrowth: 2.1,
-  overdueGrowth: -15.2
+  totalTasks: 0,
+  completedTasks: 0,
+  completionRate: 0,
+  overdueTasks: 0,
+  taskGrowth: 0,
+  completionGrowth: 0,
+  rateGrowth: 0,
+  overdueGrowth: 0
+})
+
+// 图表数据
+const chartData = reactive({
+  trendData: {
+    categories: [],
+    newTasks: [],
+    completedTasks: [],
+    overdueTasks: []
+  },
+  statusData: [],
+  priorityData: [],
+  departmentData: {
+    categories: [],
+    values: []
+  },
+  efficiencyData: {
+    categories: [],
+    efficiency: [],
+    completion: []
+  }
 })
 
 // 表格数据
-const tableData = ref([
-  {
-    user: '张三',
-    department: '生产信息管理岗',
-    avatar: '',
-    totalTasks: 45,
-    completedTasks: 38,
-    inProgressTasks: 5,
-    pendingTasks: 2,
-    overdueTasks: 0,
-    completionRate: 84,
-    avgCompletionTime: 3.2,
-    efficiency: 'A'
-  },
-  {
-    user: '李四',
-    department: '生产计划岗',
-    avatar: '',
-    totalTasks: 32,
-    completedTasks: 25,
-    inProgressTasks: 4,
-    pendingTasks: 2,
-    overdueTasks: 1,
-    completionRate: 78,
-    avgCompletionTime: 4.1,
-    efficiency: 'B'
-  },
-  {
-    user: '王五',
-    department: '生产协调岗',
-    avatar: '',
-    totalTasks: 28,
-    completedTasks: 22,
-    inProgressTasks: 3,
-    pendingTasks: 2,
-    overdueTasks: 1,
-    completionRate: 79,
-    avgCompletionTime: 3.8,
-    efficiency: 'B'
-  },
-  {
-    user: '赵六',
-    department: '项目评价岗',
-    avatar: '',
-    totalTasks: 38,
-    completedTasks: 35,
-    inProgressTasks: 2,
-    pendingTasks: 1,
-    overdueTasks: 0,
-    completionRate: 92,
-    avgCompletionTime: 2.5,
-    efficiency: 'A'
-  }
-])
+const tableData = ref([])
+const totalUsers = ref(0)
 
 // 计算属性
 const filteredTableData = computed(() => {
@@ -475,19 +445,208 @@ const exportReport = () => {
   ElMessage.success('报表导出功能开发中...')
 }
 
+// 获取任务统计数据
+const fetchTasksStats = async () => {
+  try {
+    const params = {
+      start_date: dateRange.value?.[0],
+      end_date: dateRange.value?.[1]
+    }
+    const response = await api.reports.getTasksStats(params)
+    const payload = response.data?.data || {}
+
+    const basic = payload.basic_stats || {}
+    const statusStats = payload.status_stats || []
+    const priorityStats = payload.priority_stats || []
+
+    // 更新统计数据
+    const total = basic.total_tasks || 0
+    const completed = basic.completed_tasks || 0
+    const overdue = basic.overdue_tasks || 0
+
+    Object.assign(stats, {
+      totalTasks: total,
+      completedTasks: completed,
+      completionRate: total > 0 ? Math.round((completed / total) * 100) : 0,
+      overdueTasks: overdue,
+      taskGrowth: 0,
+      completionGrowth: 0,
+      rateGrowth: 0,
+      overdueGrowth: 0
+    })
+
+    // 更新状态分布数据（后端返回按状态聚合的数组 + 逾期来自基础统计）
+    const getStatusCount = (key: string) => {
+      const item = statusStats.find((s: any) => s.status === key)
+      return item ? (item.count || 0) : 0
+    }
+    chartData.statusData = [
+      { value: getStatusCount('completed'), name: '已完成', itemStyle: { color: '#67C23A' } },
+      { value: getStatusCount('in_progress'), name: '进行中', itemStyle: { color: '#E6A23C' } },
+      { value: getStatusCount('pending'), name: '待处理', itemStyle: { color: '#909399' } },
+      { value: overdue, name: '逾期', itemStyle: { color: '#F56C6C' } }
+    ]
+
+    // 更新优先级分布数据（后端返回数组 priority/count）
+    const priorityMap: Record<string, number> = {}
+    priorityStats.forEach((p: any) => {
+      priorityMap[p.priority] = (p.count || 0)
+    })
+    chartData.priorityData = [
+      { value: priorityMap['urgent'] || 0, name: '紧急', itemStyle: { color: '#F56C6C' } },
+      { value: priorityMap['high'] || 0, name: '高', itemStyle: { color: '#E6A23C' } },
+      { value: priorityMap['medium'] || 0, name: '中', itemStyle: { color: '#409EFF' } },
+      { value: priorityMap['low'] || 0, name: '低', itemStyle: { color: '#909399' } }
+    ]
+  } catch (error) {
+    console.error('获取任务统计数据失败:', error)
+    ElMessage.error('获取统计数据失败')
+  }
+}
+
+// 获取任务趋势数据
+const fetchTasksTrend = async () => {
+  try {
+    const params = {
+      start_date: dateRange.value?.[0],
+      end_date: dateRange.value?.[1],
+      period: trendPeriod.value
+    }
+    const response = await api.reports.getTasksTrend(params)
+    const payload = response.data?.data || {}
+
+    const creation = payload.creation_trend || []
+    const completion = payload.completion_trend || []
+
+    const createdMap: Record<string, number> = {}
+    creation.forEach((it: any) => { createdMap[it.period] = it.created_count || it.count || 0 })
+    const completedMap: Record<string, number> = {}
+    completion.forEach((it: any) => { completedMap[it.period] = it.completed_count || it.count || 0 })
+
+    const periodsSet = new Set<string>([
+      ...creation.map((it: any) => it.period),
+      ...completion.map((it: any) => it.period)
+    ])
+    const periods = Array.from(periodsSet).sort()
+
+    chartData.trendData.categories = periods
+    chartData.trendData.newTasks = periods.map(p => createdMap[p] || 0)
+    chartData.trendData.completedTasks = periods.map(p => completedMap[p] || 0)
+    chartData.trendData.overdueTasks = periods.map(() => 0)
+  } catch (error) {
+    console.error('获取任务趋势数据失败:', error)
+    ElMessage.error('获取趋势数据失败')
+  }
+}
+
+// 获取部门绩效数据
+const fetchDepartmentsPerformance = async () => {
+  try {
+    const params = {
+      start_date: dateRange.value?.[0],
+      end_date: dateRange.value?.[1]
+    }
+    const response = await api.reports.getDepartmentsPerformance(params)
+    const data = response.data?.data || []
+
+    if (data && data.length > 0) {
+      chartData.departmentData.categories = data.map((item: any) => item.department)
+      chartData.departmentData.values = data.map((item: any) => item.total_tasks || 0)
+    }
+  } catch (error) {
+    console.error('获取部门绩效数据失败:', error)
+    ElMessage.error('获取部门数据失败')
+  }
+}
+
+// 获取用户绩效数据
+const fetchUsersPerformance = async () => {
+  try {
+    const params = {
+      start_date: dateRange.value?.[0],
+      end_date: dateRange.value?.[1]
+    }
+    // 使用任务统计接口返回的 user_stats 填充用户表格与效率图表
+    const response = await api.reports.getTasksStats(params)
+    const payload = response.data?.data || {}
+    const users = payload.user_stats || []
+
+    if (users && users.length > 0) {
+      // 更新表格数据
+      tableData.value = users.map((u: any) => {
+        const total = u.assigned_tasks || 0
+        const completed = u.completed_tasks || 0
+        const overdue = u.overdue_tasks || 0
+        const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0
+        const efficiencyScore = total > 0 ? Math.max(0, Math.round(((completed - overdue) / total) * 100)) : 0
+        return {
+          user: u.real_name || `用户${u.id}`,
+          department: u.department || '-',
+          avatar: u.avatar || '',
+          totalTasks: total,
+          completedTasks: completed,
+          inProgressTasks: u.in_progress_tasks || 0,
+          pendingTasks: 0,
+          overdueTasks: overdue,
+          completionRate,
+          avgCompletionTime: u.avg_completion_days || 0,
+          efficiency: getEfficiencyGrade(completionRate)
+        }
+      })
+
+      totalUsers.value = users.length
+
+      // 更新效率图表数据
+      chartData.efficiencyData.categories = users.map((u: any) => u.real_name || `用户${u.id}`)
+      chartData.efficiencyData.efficiency = users.map((u: any) => {
+        const total = u.assigned_tasks || 0
+        const completed = u.completed_tasks || 0
+        const overdue = u.overdue_tasks || 0
+        return total > 0 ? Math.max(0, Math.round(((completed - overdue) / total) * 100)) : 0
+      })
+      chartData.efficiencyData.completion = users.map((u: any) => {
+        const total = u.assigned_tasks || 0
+        const completed = u.completed_tasks || 0
+        return total > 0 ? Math.round((completed / total) * 100) : 0
+      })
+    }
+  } catch (error) {
+    console.error('获取用户绩效数据失败:', error)
+    ElMessage.error('获取用户数据失败')
+  }
+}
+
+// 根据完成率计算效率等级
+const getEfficiencyGrade = (completionRate: number): string => {
+  if (completionRate >= 90) return 'A'
+  if (completionRate >= 80) return 'B'
+  if (completionRate >= 70) return 'C'
+  return 'D'
+}
+
 // 刷新数据
 const refreshData = async () => {
   loading.value = true
   try {
-    // TODO: 调用API获取数据
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    // 并行获取所有数据
+    await Promise.all([
+      fetchTasksStats(),
+      fetchTasksTrend(),
+      fetchDepartmentsPerformance(),
+      fetchUsersPerformance()
+    ])
     
     // 更新所有图表
     await nextTick()
-    updateAllCharts()
+    updateTrendChart()
+    updateStatusChart()
+    updatePriorityChart()
+    updateDepartmentChart()
+    updateEfficiencyChart()
     
     ElMessage.success('数据已刷新')
   } catch (error) {
+    console.error('刷新数据失败:', error)
     ElMessage.error('刷新数据失败')
   } finally {
     loading.value = false
@@ -524,7 +683,7 @@ const updateTrendChart = () => {
     },
     xAxis: {
       type: 'category',
-      data: ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月']
+      data: chartData.trendData.categories.length > 0 ? chartData.trendData.categories : ['暂无数据']
     },
     yAxis: {
       type: 'value'
@@ -533,7 +692,7 @@ const updateTrendChart = () => {
       {
         name: '新建任务',
         type: 'line',
-        data: [120, 132, 101, 134, 90, 230, 210, 182, 191, 234, 290, 330],
+        data: chartData.trendData.newTasks,
         smooth: true,
         itemStyle: {
           color: '#409EFF'
@@ -542,7 +701,7 @@ const updateTrendChart = () => {
       {
         name: '完成任务',
         type: 'line',
-        data: [85, 98, 87, 112, 78, 195, 178, 165, 172, 198, 245, 285],
+        data: chartData.trendData.completedTasks,
         smooth: true,
         itemStyle: {
           color: '#67C23A'
@@ -551,7 +710,7 @@ const updateTrendChart = () => {
       {
         name: '逾期任务',
         type: 'line',
-        data: [12, 8, 15, 6, 18, 22, 15, 8, 12, 18, 25, 20],
+        data: chartData.trendData.overdueTasks,
         smooth: true,
         itemStyle: {
           color: '#F56C6C'
@@ -568,6 +727,12 @@ const initStatusChart = () => {
   if (!statusChartRef.value) return
   
   statusChart = echarts.init(statusChartRef.value)
+  updateStatusChart()
+}
+
+// 更新状态分布图
+const updateStatusChart = () => {
+  if (!statusChart) return
   
   const option = {
     tooltip: {
@@ -583,11 +748,8 @@ const initStatusChart = () => {
         name: '任务状态',
         type: 'pie',
         radius: '50%',
-        data: [
-          { value: 892, name: '已完成', itemStyle: { color: '#67C23A' } },
-          { value: 234, name: '进行中', itemStyle: { color: '#E6A23C' } },
-          { value: 77, name: '待处理', itemStyle: { color: '#909399' } },
-          { value: 45, name: '逾期', itemStyle: { color: '#F56C6C' } }
+        data: chartData.statusData.length > 0 ? chartData.statusData : [
+          { value: 0, name: '暂无数据', itemStyle: { color: '#E4E7ED' } }
         ],
         emphasis: {
           itemStyle: {
@@ -608,6 +770,12 @@ const initPriorityChart = () => {
   if (!priorityChartRef.value) return
   
   priorityChart = echarts.init(priorityChartRef.value)
+  updatePriorityChart()
+}
+
+// 更新优先级分布图
+const updatePriorityChart = () => {
+  if (!priorityChart) return
   
   const option = {
     tooltip: {
@@ -633,11 +801,8 @@ const initPriorityChart = () => {
         labelLine: {
           show: false
         },
-        data: [
-          { value: 156, name: '紧急', itemStyle: { color: '#F56C6C' } },
-          { value: 312, name: '高', itemStyle: { color: '#E6A23C' } },
-          { value: 468, name: '中', itemStyle: { color: '#409EFF' } },
-          { value: 312, name: '低', itemStyle: { color: '#909399' } }
+        data: chartData.priorityData.length > 0 ? chartData.priorityData : [
+          { value: 0, name: '暂无数据', itemStyle: { color: '#E4E7ED' } }
         ]
       }
     ]
@@ -651,6 +816,12 @@ const initDepartmentChart = () => {
   if (!departmentChartRef.value) return
   
   departmentChart = echarts.init(departmentChartRef.value)
+  updateDepartmentChart()
+}
+
+// 更新部门统计图
+const updateDepartmentChart = () => {
+  if (!departmentChart) return
   
   const option = {
     tooltip: {
@@ -671,13 +842,13 @@ const initDepartmentChart = () => {
     },
     yAxis: {
       type: 'category',
-      data: ['生产信息管理岗', '生产计划岗', '生产协调岗', '项目评价岗', '项目监控岗', '值班工程师', '应急管理岗']
+      data: chartData.departmentData.categories.length > 0 ? chartData.departmentData.categories : ['暂无数据']
     },
     series: [
       {
         name: '任务数量',
         type: 'bar',
-        data: [385, 298, 234, 187, 144],
+        data: chartData.departmentData.values,
         itemStyle: {
           color: '#409EFF'
         }
@@ -702,39 +873,22 @@ const updateEfficiencyChart = () => {
   
   const option = {
     tooltip: {
-      trigger: 'axis',
-      axisPointer: {
-        type: 'cross',
-        crossStyle: {
-          color: '#999'
-        }
-      }
+      trigger: 'axis'
     },
     legend: {
-      data: ['任务数量', '完成率']
+      data: ['平均效率', '完成率']
     },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      containLabel: true
+    xAxis: {
+      type: 'category',
+      data: chartData.efficiencyData.categories.length > 0 ? chartData.efficiencyData.categories : ['暂无数据']
     },
-    xAxis: [
-      {
-        type: 'category',
-        data: ['张三', '李四', '王五', '赵六', '钱七', '孙八', '周九', '吴十'],
-        axisPointer: {
-          type: 'shadow'
-        }
-      }
-    ],
     yAxis: [
       {
         type: 'value',
-        name: '任务数量',
+        name: '效率分数',
         min: 0,
-        max: 50,
-        interval: 10,
+        max: 100,
+        position: 'left',
         axisLabel: {
           formatter: '{value}'
         }
@@ -744,7 +898,7 @@ const updateEfficiencyChart = () => {
         name: '完成率',
         min: 0,
         max: 100,
-        interval: 20,
+        position: 'right',
         axisLabel: {
           formatter: '{value}%'
         }
@@ -752,20 +906,20 @@ const updateEfficiencyChart = () => {
     ],
     series: [
       {
-        name: '任务数量',
+        name: '平均效率',
         type: 'bar',
-        data: [45, 32, 28, 38, 25, 30, 22, 35],
+        data: chartData.efficiencyData.efficiency,
         itemStyle: {
-          color: '#409EFF'
+          color: '#67C23A'
         }
       },
       {
         name: '完成率',
         type: 'line',
         yAxisIndex: 1,
-        data: [84, 78, 79, 92, 68, 75, 82, 88],
+        data: chartData.efficiencyData.completion,
         itemStyle: {
-          color: '#67C23A'
+          color: '#E6A23C'
         }
       }
     ]

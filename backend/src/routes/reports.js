@@ -50,7 +50,7 @@ router.get('/tasks/stats', requireManager, async (req, res) => {
         SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) as completed_tasks,
         SUM(CASE WHEN t.status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_tasks,
         SUM(CASE WHEN t.priority = 'urgent' THEN 1 ELSE 0 END) as urgent_tasks,
-        SUM(CASE WHEN t.due_date < NOW() AND t.status NOT IN ('completed', 'cancelled') THEN 1 ELSE 0 END) as overdue_tasks,
+        SUM(CASE WHEN t.due_date < datetime('now', 'localtime') AND t.status NOT IN ('completed', 'cancelled') THEN 1 ELSE 0 END) as overdue_tasks,
         AVG(CASE WHEN t.status = 'completed' AND t.estimated_hours > 0 THEN t.actual_hours / t.estimated_hours * 100 ELSE NULL END) as avg_completion_rate
       FROM tasks t
       LEFT JOIN users u ON t.assigned_to = u.id
@@ -129,23 +129,19 @@ router.get('/tasks/trends', requireManager, async (req, res) => {
       end_date
     } = req.query;
     
-    let dateFormat, dateInterval;
+    let groupBy;
     switch (period) {
       case 'week':
-        dateFormat = '%Y-%u';
-        dateInterval = 'WEEK';
+        groupBy = "strftime('%Y-%W', created_at)";
         break;
       case 'month':
-        dateFormat = '%Y-%m';
-        dateInterval = 'MONTH';
+        groupBy = "strftime('%Y-%m', created_at)";
         break;
       case 'quarter':
-        dateFormat = '%Y-Q%q';
-        dateInterval = 'QUARTER';
+        groupBy = "strftime('%Y', created_at) || '-Q' || ((strftime('%m', created_at) - 1) / 3 + 1)";
         break;
       default:
-        dateFormat = '%Y-%m-%d';
-        dateInterval = 'DAY';
+        groupBy = "strftime('%Y-%m-%d', created_at)";
     }
     
     let whereConditions = ['status != "deleted"'];
@@ -166,11 +162,11 @@ router.get('/tasks/trends', requireManager, async (req, res) => {
     // 任务创建趋势
     const creationTrendSql = `
       SELECT 
-        DATE_FORMAT(created_at, '${dateFormat}') as period,
+        ${groupBy} as period,
         COUNT(*) as created_count
       FROM tasks
       ${whereClause}
-      GROUP BY DATE_FORMAT(created_at, '${dateFormat}')
+      GROUP BY period
       ORDER BY period
     `;
     
@@ -179,11 +175,11 @@ router.get('/tasks/trends', requireManager, async (req, res) => {
     // 任务完成趋势
     const completionTrendSql = `
       SELECT 
-        DATE_FORMAT(updated_at, '${dateFormat}') as period,
+        ${groupBy.replace('created_at', 'updated_at')} as period,
         COUNT(*) as completed_count
       FROM tasks
       WHERE status = 'completed' ${whereConditions.length > 0 ? 'AND ' + whereConditions.join(' AND ') : ''}
-      GROUP BY DATE_FORMAT(updated_at, '${dateFormat}')
+      GROUP BY period
       ORDER BY period
     `;
     
@@ -231,9 +227,9 @@ router.get('/departments/performance', requireManager, async (req, res) => {
         COUNT(t.id) as total_tasks,
         SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) as completed_tasks,
         SUM(CASE WHEN t.status = 'in_progress' THEN 1 ELSE 0 END) as in_progress_tasks,
-        SUM(CASE WHEN t.due_date < NOW() AND t.status NOT IN ('completed', 'cancelled') THEN 1 ELSE 0 END) as overdue_tasks,
-        AVG(CASE WHEN t.status = 'completed' THEN DATEDIFF(t.updated_at, t.created_at) ELSE NULL END) as avg_completion_days,
-        ROUND(SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) / COUNT(t.id) * 100, 2) as completion_rate
+        SUM(CASE WHEN t.due_date < datetime('now', 'localtime') AND t.status NOT IN ('completed', 'cancelled') THEN 1 ELSE 0 END) as overdue_tasks,
+        AVG(CASE WHEN t.status = 'completed' THEN julianday(t.updated_at) - julianday(t.created_at) ELSE NULL END) as avg_completion_days,
+        ROUND(SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) * 100.0 / COUNT(t.id), 2) as completion_rate
       FROM tasks t
       LEFT JOIN users u ON t.assigned_to = u.id
       ${whereClause} AND u.department IS NOT NULL
@@ -289,8 +285,8 @@ router.get('/users/performance', async (req, res) => {
         SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) as completed_tasks,
         SUM(CASE WHEN t.status = 'in_progress' THEN 1 ELSE 0 END) as in_progress_tasks,
         SUM(CASE WHEN t.status = 'pending' THEN 1 ELSE 0 END) as pending_tasks,
-        SUM(CASE WHEN t.due_date < NOW() AND t.status NOT IN ('completed', 'cancelled') THEN 1 ELSE 0 END) as overdue_tasks,
-        AVG(CASE WHEN t.status = 'completed' THEN DATEDIFF(t.updated_at, t.created_at) ELSE NULL END) as avg_completion_days,
+        SUM(CASE WHEN t.due_date < datetime('now', 'localtime') AND t.status NOT IN ('completed', 'cancelled') THEN 1 ELSE 0 END) as overdue_tasks,
+        AVG(CASE WHEN t.status = 'completed' THEN julianday(t.updated_at) - julianday(t.created_at) ELSE NULL END) as avg_completion_days,
         SUM(CASE WHEN t.status = 'completed' THEN t.actual_hours ELSE 0 END) as total_work_hours
       FROM tasks t
       ${whereClause}
@@ -314,11 +310,11 @@ router.get('/users/performance', async (req, res) => {
     // 月度完成趋势
     const monthlyTrendSql = `
       SELECT 
-        DATE_FORMAT(t.updated_at, '%Y-%m') as month,
+        strftime('%Y-%m', t.updated_at) as month,
         COUNT(*) as completed_count
       FROM tasks t
       ${whereClause} AND t.status = 'completed'
-      GROUP BY DATE_FORMAT(t.updated_at, '%Y-%m')
+      GROUP BY month
       ORDER BY month
     `;
     
