@@ -100,14 +100,14 @@
               <el-icon class="file-icon" :style="{ color: getFileIconColor(row) }">
                 <component :is="getFileIcon(row)" />
               </el-icon>
-              <span class="file-name" @click="handleFileClick(row)">{{ row.name }}</span>
+              <span class="file-name" @click="handleFileClick(row)">{{ row.original_name || row.filename }}</span>
             </div>
           </template>
         </el-table-column>
         
         <el-table-column label="大小" width="120">
           <template #default="{ row }">
-            {{ row.type === 'folder' ? '-' : formatFileSize(row.size) }}
+            {{ formatFileSize(row.file_size) }}
           </template>
         </el-table-column>
         
@@ -117,9 +117,9 @@
           </template>
         </el-table-column>
         
-        <el-table-column label="修改时间" width="180">
+        <el-table-column label="上传时间" width="180">
           <template #default="{ row }">
-            {{ formatDateTime(row.modifiedTime) }}
+            {{ formatDateTime(row.uploaded_at) }}
           </template>
         </el-table-column>
         
@@ -162,12 +162,12 @@
           </div>
           
           <div class="file-card-info">
-            <div class="file-card-name" :title="file.name">{{ file.name }}</div>
+            <div class="file-card-name" :title="file.original_name || file.filename">{{ file.original_name || file.filename }}</div>
             <div class="file-card-meta">
               <span>{{ getFileTypeText(file) }}</span>
-              <span v-if="file.type !== 'folder'">{{ formatFileSize(file.size) }}</span>
+              <span>{{ formatFileSize(file.file_size) }}</span>
             </div>
-            <div class="file-card-time">{{ formatDateTime(file.modifiedTime) }}</div>
+            <div class="file-card-time">{{ formatDateTime(file.uploaded_at) }}</div>
           </div>
           
           <div class="file-card-actions">
@@ -198,12 +198,12 @@
     </div>
     
     <!-- 分页 -->
-    <div v-if="filteredFiles.length > 0" class="pagination-container">
+    <div v-if="total > 0" class="pagination-container">
       <el-pagination
         v-model:current-page="currentPage"
         v-model:page-size="pageSize"
         :page-sizes="[20, 50, 100]"
-        :total="filteredFiles.length"
+        :total="total"
         layout="total, sizes, prev, pager, next, jumper"
         @size-change="handleSizeChange"
         @current-change="handleCurrentChange"
@@ -211,35 +211,59 @@
     </div>
     
     <!-- 文件上传对话框 -->
-    <el-dialog v-model="showUploadDialog" title="上传文件" width="600px">
-      <el-upload
-        ref="uploadRef"
-        class="upload-demo"
-        :action="uploadUrl"
-        :headers="uploadHeaders"
-        :data="uploadData"
-        :on-success="handleUploadSuccess"
-        :on-error="handleUploadError"
-        :on-progress="handleUploadProgress"
-        :before-upload="beforeUpload"
-        multiple
-        drag
-      >
-        <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
-        <div class="el-upload__text">
-          将文件拖到此处，或<em>点击上传</em>
-        </div>
-        <template #tip>
-          <div class="el-upload__tip">
-            支持多文件上传，单个文件大小不超过 100MB
+    <el-dialog v-model="showUploadDialog" title="上传文件" width="700px">
+      <div class="upload-container">
+        <el-upload
+          ref="uploadRef"
+          class="upload-demo"
+          :action="uploadUrl"
+          :headers="uploadHeaders"
+          :data="uploadData"
+          :on-success="handleUploadSuccess"
+          :on-error="handleUploadError"
+          :on-progress="handleUploadProgress"
+          :before-upload="beforeUpload"
+          :file-list="uploadFileList"
+          :auto-upload="false"
+          multiple
+          drag
+        >
+          <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
+          <div class="el-upload__text">
+            将文件拖到此处，或<em>点击选择文件</em>
           </div>
-        </template>
-      </el-upload>
+          <template #tip>
+            <div class="el-upload__tip">
+              支持多文件上传，单个文件大小不超过 100MB
+            </div>
+          </template>
+        </el-upload>
+        
+        <!-- 上传进度 -->
+        <div v-if="uploadProgress.show" class="upload-progress">
+          <div class="progress-header">
+            <span>上传进度</span>
+            <span>{{ uploadProgress.current }}/{{ uploadProgress.total }}</span>
+          </div>
+          <el-progress
+            :percentage="uploadProgress.percentage"
+            :status="uploadProgress.status"
+          />
+          <div class="progress-info">
+            <span>{{ uploadProgress.currentFile }}</span>
+          </div>
+        </div>
+      </div>
       
       <template #footer>
-        <el-button @click="showUploadDialog = false">取消</el-button>
-        <el-button type="primary" @click="confirmUpload">
-          确定上传
+        <el-button @click="cancelUpload">取消</el-button>
+        <el-button 
+          type="primary" 
+          :loading="uploadProgress.show"
+          :disabled="uploadFileList.length === 0"
+          @click="startUpload"
+        >
+          {{ uploadProgress.show ? '上传中...' : '开始上传' }}
         </el-button>
       </template>
     </el-dialog>
@@ -263,6 +287,78 @@
         </el-button>
       </template>
     </el-dialog>
+    
+    <!-- 文件预览对话框 -->
+    <el-dialog 
+      v-model="showPreviewDialog" 
+      :title="previewFileData?.original_name || previewFileData?.filename" 
+      width="80%"
+      top="5vh"
+      class="preview-dialog"
+    >
+      <div class="preview-container">
+        <!-- 图片预览 -->
+        <div v-if="isImageFile(previewFileData)" class="image-preview">
+          <img 
+            :src="getPreviewUrl(previewFileData)"
+            :alt="previewFileData?.original_name || previewFileData?.filename"
+            @load="handleImageLoad"
+            @error="handleImageError"
+          />
+        </div>
+        
+        <!-- 视频预览 -->
+        <div v-else-if="isVideoFile(previewFileData)" class="video-preview">
+          <video 
+            :src="getPreviewUrl(previewFileData)"
+            controls
+            preload="metadata"
+          >
+            您的浏览器不支持视频播放
+          </video>
+        </div>
+        
+        <!-- 音频预览 -->
+        <div v-else-if="isAudioFile(previewFileData)" class="audio-preview">
+          <audio 
+            :src="getPreviewUrl(previewFileData)"
+            controls
+            preload="metadata"
+          >
+            您的浏览器不支持音频播放
+          </audio>
+        </div>
+        
+        <!-- 文本文件预览 -->
+        <div v-else-if="isTextFile(previewFileData)" class="text-preview">
+          <div v-if="textContent" class="text-content">
+            <pre>{{ textContent }}</pre>
+          </div>
+          <div v-else class="loading-text">
+            <el-icon class="is-loading"><Loading /></el-icon>
+            正在加载文件内容...
+          </div>
+        </div>
+        
+        <!-- 不支持预览的文件 -->
+        <div v-else class="unsupported-preview">
+          <el-icon><Document /></el-icon>
+          <p>此文件类型不支持预览</p>
+          <el-button type="primary" @click="downloadFile(previewFileData!)">
+            <el-icon><Download /></el-icon>
+            下载文件
+          </el-button>
+        </div>
+      </div>
+      
+      <template #footer>
+        <el-button @click="showPreviewDialog = false">关闭</el-button>
+        <el-button type="primary" @click="downloadFile(previewFileData!)">
+          <el-icon><Download /></el-icon>
+          下载
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -283,11 +379,14 @@ import {
   Document,
   Picture,
   VideoCamera,
-  Headphones,
-  Files
+  Microphone,
+  Files,
+  Download,
+  Loading
 } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { useAuthStore } from '@/stores/auth'
+import { filesApi, type FileInfo } from '@/api/files'
 
 const authStore = useAuthStore()
 
@@ -306,65 +405,25 @@ const renamingFile = ref<any>(null)
 const newFileName = ref('')
 const uploadRef = ref<UploadInstance>()
 
+// 预览相关
+const showPreviewDialog = ref(false)
+const previewFileData = ref<FileInfo | null>(null)
+const textContent = ref('')
+
 // 文件列表
-const files = ref<any[]>([
-  {
-    id: '1',
-    name: '项目文档',
-    type: 'folder',
-    size: 0,
-    modifiedTime: '2024-01-20 10:30:00',
-    path: '/项目文档'
-  },
-  {
-    id: '2',
-    name: '设计稿',
-    type: 'folder',
-    size: 0,
-    modifiedTime: '2024-01-19 15:20:00',
-    path: '/设计稿'
-  },
-  {
-    id: '3',
-    name: '需求文档.docx',
-    type: 'document',
-    size: 2048576,
-    modifiedTime: '2024-01-20 09:15:00',
-    path: '/需求文档.docx'
-  },
-  {
-    id: '4',
-    name: '系统架构图.png',
-    type: 'image',
-    size: 1024000,
-    modifiedTime: '2024-01-19 14:30:00',
-    path: '/系统架构图.png'
-  },
-  {
-    id: '5',
-    name: '演示视频.mp4',
-    type: 'video',
-    size: 52428800,
-    modifiedTime: '2024-01-18 16:45:00',
-    path: '/演示视频.mp4'
-  },
-  {
-    id: '6',
-    name: '会议录音.mp3',
-    type: 'audio',
-    size: 8388608,
-    modifiedTime: '2024-01-17 11:20:00',
-    path: '/会议录音.mp3'
-  },
-  {
-    id: '7',
-    name: 'README.md',
-    type: 'document',
-    size: 4096,
-    modifiedTime: '2024-01-20 08:00:00',
-    path: '/README.md'
-  }
-])
+const files = ref<FileInfo[]>([])
+const total = ref(0)
+
+// 上传相关
+const uploadFileList = ref<any[]>([])
+const uploadProgress = reactive({
+  show: false,
+  percentage: 0,
+  current: 0,
+  total: 0,
+  currentFile: '',
+  status: 'success' as 'success' | 'exception' | 'warning'
+})
 
 // 计算属性
 const pathSegments = computed(() => {
@@ -372,46 +431,15 @@ const pathSegments = computed(() => {
 })
 
 const filteredFiles = computed(() => {
-  let result = files.value
-  
-  // 搜索过滤
-  if (searchKeyword.value) {
-    result = result.filter(file => 
-      file.name.toLowerCase().includes(searchKeyword.value.toLowerCase())
-    )
-  }
-  
-  // 排序
-  result.sort((a, b) => {
-    // 文件夹优先
-    if (a.type === 'folder' && b.type !== 'folder') return -1
-    if (a.type !== 'folder' && b.type === 'folder') return 1
-    
-    switch (sortBy.value) {
-      case 'name':
-        return a.name.localeCompare(b.name)
-      case 'size':
-        return b.size - a.size
-      case 'modifiedTime':
-        return new Date(b.modifiedTime).getTime() - new Date(a.modifiedTime).getTime()
-      case 'type':
-        return a.type.localeCompare(b.type)
-      default:
-        return 0
-    }
-  })
-  
-  return result
+  return files.value
 })
 
 const paginatedFiles = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value
-  const end = start + pageSize.value
-  return filteredFiles.value.slice(start, end)
+  return filteredFiles.value
 })
 
 const uploadUrl = computed(() => {
-  return `${import.meta.env.VITE_API_BASE_URL}/files/upload`
+  return `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'}/api/files/upload`
 })
 
 const uploadHeaders = computed(() => {
@@ -422,7 +450,7 @@ const uploadHeaders = computed(() => {
 
 const uploadData = computed(() => {
   return {
-    path: currentPath.value
+    task_id: 1 // 默认任务ID，实际应该从路由或上下文获取
   }
 })
 
@@ -436,7 +464,7 @@ const getFileIcon = (file: any) => {
     case 'video':
       return VideoCamera
     case 'audio':
-      return Headphones
+      return Microphone
     case 'document':
       return Document
     default:
@@ -536,7 +564,11 @@ const handleFileDoubleClick = (file: any) => {
     loadFiles()
   } else {
     // 预览或下载文件
-    previewFile(file)
+    if (canPreview(file)) {
+      previewFileHandler(file)
+    } else {
+      downloadFile(file)
+    }
   }
 }
 
@@ -607,14 +639,26 @@ const createFolder = async () => {
 }
 
 // 下载文件
-const downloadFile = (file: any) => {
-  // TODO: 实现文件下载
-  const link = document.createElement('a')
-  link.href = `${import.meta.env.VITE_API_BASE_URL}/files/download/${file.id}`
-  link.download = file.name
-  link.click()
-  
-  ElMessage.success('开始下载文件')
+const downloadFile = async (file: FileInfo) => {
+  try {
+    const response = await filesApi.downloadFile(file.id)
+    
+    // 创建下载链接
+    const blob = new Blob([response.data])
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = file.original_name || file.filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    
+    ElMessage.success('文件下载成功')
+  } catch (error) {
+    console.error('文件下载失败:', error)
+    ElMessage.error('文件下载失败')
+  }
 }
 
 // 重命名文件
@@ -648,10 +692,10 @@ const confirmRename = async () => {
 }
 
 // 删除文件
-const deleteFile = async (file: any) => {
+const deleteFile = async (file: FileInfo) => {
   try {
     await ElMessageBox.confirm(
-      `确定要删除 "${file.name}" 吗？`,
+      `确定要删除文件 "${file.original_name || file.filename}" 吗？`,
       '确认删除',
       {
         confirmButtonText: '确定',
@@ -660,29 +704,18 @@ const deleteFile = async (file: any) => {
       }
     )
     
-    // TODO: 调用API删除文件
-    const index = files.value.findIndex(f => f.id === file.id)
-    if (index > -1) {
-      files.value.splice(index, 1)
+    await filesApi.deleteFile(file.id)
+    ElMessage.success('文件删除成功')
+    loadFiles() // 刷新文件列表
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      console.error('文件删除失败:', error)
+      ElMessage.error('文件删除失败')
     }
-    
-    ElMessage.success('删除成功')
-  } catch {
-    // 用户取消
   }
 }
 
-// 预览文件
-const previewFile = (file: any) => {
-  // TODO: 实现文件预览
-  if (file.type === 'image') {
-    // 图片预览
-    window.open(`${import.meta.env.VITE_API_BASE_URL}/files/preview/${file.id}`, '_blank')
-  } else {
-    // 其他文件类型下载
-    downloadFile(file)
-  }
-}
+// 预览文件功能已在 previewFileHandler 函数中实现
 
 // 上传前检查
 const beforeUpload = (file: File) => {
@@ -696,37 +729,171 @@ const beforeUpload = (file: File) => {
   return true
 }
 
+// 开始上传
+const startUpload = () => {
+  if (uploadFileList.value.length === 0) {
+    ElMessage.warning('请先选择要上传的文件')
+    return
+  }
+  
+  uploadProgress.show = true
+  uploadProgress.current = 0
+  uploadProgress.total = uploadFileList.value.length
+  uploadProgress.percentage = 0
+  uploadProgress.status = 'success'
+  
+  uploadRef.value?.submit()
+}
+
+// 取消上传
+const cancelUpload = () => {
+  uploadRef.value?.clearFiles()
+  uploadFileList.value = []
+  uploadProgress.show = false
+  uploadProgress.percentage = 0
+  uploadProgress.current = 0
+  uploadProgress.total = 0
+  uploadProgress.currentFile = ''
+  showUploadDialog.value = false
+}
+
 // 上传成功
 const handleUploadSuccess = (response: any, file: any) => {
-  ElMessage.success(`${file.name} 上传成功`)
-  loadFiles() // 刷新文件列表
+  uploadProgress.current++
+  uploadProgress.percentage = Math.round((uploadProgress.current / uploadProgress.total) * 100)
+  
+  if (response.success) {
+    ElMessage.success(`${file.name} 上传成功`)
+  } else {
+    ElMessage.error(response.message || `${file.name} 上传失败`)
+    uploadProgress.status = 'exception'
+  }
+  
+  // 所有文件上传完成
+  if (uploadProgress.current >= uploadProgress.total) {
+    setTimeout(() => {
+      uploadProgress.show = false
+      showUploadDialog.value = false
+      loadFiles() // 刷新文件列表
+      uploadRef.value?.clearFiles()
+      uploadFileList.value = []
+    }, 1000)
+  }
 }
 
 // 上传失败
 const handleUploadError = (error: any, file: any) => {
+  console.error('文件上传失败:', error)
+  uploadProgress.current++
+  uploadProgress.percentage = Math.round((uploadProgress.current / uploadProgress.total) * 100)
+  uploadProgress.status = 'exception'
+  
   ElMessage.error(`${file.name} 上传失败`)
+  
+  // 所有文件处理完成
+  if (uploadProgress.current >= uploadProgress.total) {
+    setTimeout(() => {
+      uploadProgress.show = false
+      loadFiles() // 刷新文件列表
+    }, 1000)
+  }
 }
 
 // 上传进度
 const handleUploadProgress = (event: any, file: any) => {
-  // 可以在这里显示上传进度
+  uploadProgress.currentFile = file.name
 }
 
-// 确认上传
-const confirmUpload = () => {
-  uploadRef.value?.submit()
-  showUploadDialog.value = false
+// 获取文件扩展名
+const getFileExtension = (filename: string): string => {
+  return filename.split('.').pop()?.toLowerCase() || ''
+}
+
+// 预览文件处理
+const previewFileHandler = async (file: FileInfo) => {
+  previewFileData.value = file
+  textContent.value = ''
+  
+  // 如果是文本文件，加载内容
+  if (isTextFile(file)) {
+    try {
+      const response = await filesApi.getFileContent(file.id)
+      textContent.value = response.data
+    } catch (error) {
+      console.error('加载文件内容失败:', error)
+      textContent.value = '加载文件内容失败'
+    }
+  }
+  
+  showPreviewDialog.value = true
+}
+
+// 判断是否可以预览
+const canPreview = (file: FileInfo | null): boolean => {
+  if (!file) return false
+  return isImageFile(file) || isVideoFile(file) || isAudioFile(file) || isTextFile(file)
+}
+
+// 判断是否为图片文件
+const isImageFile = (file: FileInfo | null): boolean => {
+  if (!file) return false
+  const extension = getFileExtension(file.filename)
+  return ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg', 'webp'].includes(extension)
+}
+
+// 判断是否为视频文件
+const isVideoFile = (file: FileInfo | null): boolean => {
+  if (!file) return false
+  const extension = getFileExtension(file.filename)
+  return ['mp4', 'avi', 'mov', 'wmv', 'flv', 'mkv', 'webm'].includes(extension)
+}
+
+// 判断是否为音频文件
+const isAudioFile = (file: FileInfo | null): boolean => {
+  if (!file) return false
+  const extension = getFileExtension(file.filename)
+  return ['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a'].includes(extension)
+}
+
+// 判断是否为文本文件
+const isTextFile = (file: FileInfo | null): boolean => {
+  if (!file) return false
+  const extension = getFileExtension(file.filename)
+  return ['txt', 'md', 'json', 'xml', 'html', 'css', 'js', 'ts', 'vue', 'jsx', 'tsx', 'py', 'java', 'c', 'cpp', 'h', 'hpp'].includes(extension)
+}
+
+// 获取预览URL
+const getPreviewUrl = (file: FileInfo | null): string => {
+  if (!file) return ''
+  return `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'}/api/files/preview/${file.id}`
+}
+
+// 图片加载成功
+const handleImageLoad = () => {
+  console.log('图片加载成功')
+}
+
+// 图片加载失败
+const handleImageError = () => {
+  ElMessage.error('图片加载失败')
 }
 
 // 加载文件列表
 const loadFiles = async () => {
   loading.value = true
   try {
-    // TODO: 调用API加载文件列表
-    await new Promise(resolve => setTimeout(resolve, 500))
+    const response = await filesApi.getFiles({
+      page: currentPage.value,
+      limit: pageSize.value,
+      search: searchKeyword.value || undefined,
+      sort_by: sortBy.value,
+      sort_order: 'desc'
+    })
     
-    // 模拟数据已在初始化时设置
+    files.value = response.data.files
+    total.value = response.data.total
   } catch (error) {
+    console.error('加载文件列表失败:', error)
     ElMessage.error('加载文件列表失败')
   } finally {
     loading.value = false
@@ -914,6 +1081,35 @@ onMounted(() => {
 .upload-demo :deep(.el-upload-dragger) {
   width: 100%;
   height: 200px;
+}
+
+.upload-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.upload-progress {
+  padding: 16px;
+  background: var(--el-bg-color-page);
+  border-radius: 8px;
+  border: 1px solid var(--el-border-color-lighter);
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  font-weight: 500;
+  color: var(--el-text-color-primary);
+}
+
+.progress-info {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  text-align: center;
 }
 
 @media (max-width: 768px) {

@@ -133,22 +133,21 @@
                 <el-icon class="file-icon" :class="getFileIconClass(row)">
                   <component :is="getFileIcon(row)" />
                 </el-icon>
-                <span class="file-name">{{ row.name }}</span>
+                <span class="file-name">{{ row.original_name || row.filename }}</span>
               </div>
             </template>
           </el-table-column>
           
           <el-table-column label="大小" width="120">
             <template #default="{ row }">
-              <span v-if="row.type === 'file'">{{ formatFileSize(row.size) }}</span>
-              <span v-else class="folder-size">--</span>
+              <span>{{ formatFileSize(row.file_size) }}</span>
             </template>
           </el-table-column>
           
           <el-table-column label="类型" width="120">
             <template #default="{ row }">
               <el-tag
-                :type="row.type === 'folder' ? 'warning' : 'info'"
+                type="info"
                 size="small"
                 effect="plain"
               >
@@ -157,29 +156,20 @@
             </template>
           </el-table-column>
           
-          <el-table-column label="修改时间" width="180">
+          <el-table-column label="上传时间" width="180">
             <template #default="{ row }">
-              {{ formatDate(row.modified_at) }}
+              {{ formatDate(row.uploaded_at) }}
             </template>
           </el-table-column>
           
           <el-table-column label="操作" width="200" fixed="right">
             <template #default="{ row }">
               <el-button
-                v-if="row.type === 'file'"
                 size="small"
                 @click="downloadFile(row)"
               >
                 <el-icon><Download /></el-icon>
                 下载
-              </el-button>
-              
-              <el-button
-                size="small"
-                @click="showRenameDialog(row)"
-              >
-                <el-icon><Edit /></el-icon>
-                重命名
               </el-button>
               
               <el-button
@@ -213,15 +203,15 @@
             </div>
             
             <div class="file-card-info">
-              <div class="file-card-name" :title="file.name">
-                {{ file.name }}
+              <div class="file-card-name" :title="file.original_name || file.filename">
+                {{ file.original_name || file.filename }}
               </div>
               <div class="file-card-meta">
-                <span v-if="file.type === 'file'" class="file-size">
-                  {{ formatFileSize(file.size) }}
+                <span class="file-size">
+                  {{ formatFileSize(file.file_size) }}
                 </span>
                 <span class="file-date">
-                  {{ formatDate(file.modified_at) }}
+                  {{ formatDate(file.uploaded_at) }}
                 </span>
               </div>
             </div>
@@ -233,16 +223,9 @@
                 </el-button>
                 <template #dropdown>
                   <el-dropdown-menu>
-                    <el-dropdown-item
-                      v-if="file.type === 'file'"
-                      @click="downloadFile(file)"
-                    >
+                    <el-dropdown-item @click="downloadFile(file)">
                       <el-icon><Download /></el-icon>
                       下载
-                    </el-dropdown-item>
-                    <el-dropdown-item @click="showRenameDialog(file)">
-                      <el-icon><Edit /></el-icon>
-                      重命名
                     </el-dropdown-item>
                     <el-dropdown-item @click="deleteFile(file)">
                       <el-icon><Delete /></el-icon>
@@ -351,11 +334,12 @@ import {
   Document,
   Picture,
   VideoCamera,
-  Headphones,
+  Microphone,
   Files
 } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { useAuthStore } from '@/stores/auth'
+import { filesApi, type FileInfo } from '@/api/files'
 
 const authStore = useAuthStore()
 
@@ -411,48 +395,8 @@ const renameRules = {
   ]
 }
 
-// 模拟文件数据
-const files = ref([
-  {
-    id: '1',
-    name: '项目文档',
-    type: 'folder',
-    size: 0,
-    path: '/项目文档',
-    modified_at: '2024-01-15 10:30:00',
-    created_at: '2024-01-15 10:30:00'
-  },
-  {
-    id: '2',
-    name: '需求文档.docx',
-    type: 'file',
-    size: 1024000,
-    path: '/需求文档.docx',
-    extension: 'docx',
-    modified_at: '2024-01-16 14:20:00',
-    created_at: '2024-01-16 14:20:00'
-  },
-  {
-    id: '3',
-    name: '设计图.png',
-    type: 'file',
-    size: 2048000,
-    path: '/设计图.png',
-    extension: 'png',
-    modified_at: '2024-01-17 09:15:00',
-    created_at: '2024-01-17 09:15:00'
-  },
-  {
-    id: '4',
-    name: '演示视频.mp4',
-    type: 'file',
-    size: 52428800,
-    path: '/演示视频.mp4',
-    extension: 'mp4',
-    modified_at: '2024-01-18 16:45:00',
-    created_at: '2024-01-18 16:45:00'
-  }
-])
+// 文件数据
+const files = ref<FileInfo[]>([])
 
 // 计算属性
 const pathSegments = computed(() => {
@@ -460,59 +404,11 @@ const pathSegments = computed(() => {
 })
 
 const filteredFiles = computed(() => {
-  let result = files.value
-  
-  // 搜索过滤
-  if (searchKeyword.value) {
-    result = result.filter(file =>
-      file.name.toLowerCase().includes(searchKeyword.value.toLowerCase())
-    )
-  }
-  
-  // 排序
-  result.sort((a, b) => {
-    let aValue: any
-    let bValue: any
-    
-    switch (sortBy.value) {
-      case 'name':
-        aValue = a.name.toLowerCase()
-        bValue = b.name.toLowerCase()
-        break
-      case 'size':
-        aValue = a.size
-        bValue = b.size
-        break
-      case 'type':
-        aValue = a.type === 'folder' ? 0 : 1
-        bValue = b.type === 'folder' ? 0 : 1
-        break
-      case 'modified':
-        aValue = new Date(a.modified_at).getTime()
-        bValue = new Date(b.modified_at).getTime()
-        break
-      default:
-        aValue = a.name.toLowerCase()
-        bValue = b.name.toLowerCase()
-    }
-    
-    if (sortOrder.value === 'asc') {
-      return aValue > bValue ? 1 : -1
-    } else {
-      return aValue < bValue ? 1 : -1
-    }
-  })
-  
-  // 分页
-  const start = (currentPage.value - 1) * pageSize.value
-  const end = start + pageSize.value
-  total.value = result.length
-  
-  return result.slice(start, end)
+  return files.value
 })
 
 const uploadUrl = computed(() => {
-  return `${import.meta.env.VITE_API_BASE_URL}/files/upload`
+  return `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'}/api/files/upload`
 })
 
 const uploadHeaders = computed(() => {
@@ -522,53 +418,51 @@ const uploadHeaders = computed(() => {
 })
 
 // 获取文件图标
-const getFileIcon = (file: any) => {
-  if (file.type === 'folder') {
-    return Folder
-  }
+const getFileIcon = (file: FileInfo) => {
+  const extension = getFileExtension(file.filename)
   
-  const extension = file.extension?.toLowerCase()
-  
-  if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg'].includes(extension)) {
+  if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg', 'webp'].includes(extension)) {
     return Picture
   }
   
-  if (['mp4', 'avi', 'mov', 'wmv', 'flv'].includes(extension)) {
+  if (['mp4', 'avi', 'mov', 'wmv', 'flv', 'mkv'].includes(extension)) {
     return VideoCamera
   }
   
-  if (['mp3', 'wav', 'flac', 'aac'].includes(extension)) {
-    return Headphones
+  if (['mp3', 'wav', 'flac', 'aac', 'ogg'].includes(extension)) {
+    return Microphone
   }
   
-  if (['doc', 'docx', 'pdf', 'txt', 'rtf'].includes(extension)) {
+  if (['doc', 'docx', 'pdf', 'txt', 'rtf', 'md'].includes(extension)) {
     return Document
   }
   
   return Files
 }
 
+// 获取文件扩展名
+const getFileExtension = (filename: string): string => {
+  const parts = filename.split('.')
+  return parts.length > 1 ? parts.pop()!.toLowerCase() : ''
+}
+
 // 获取文件图标样式类
-const getFileIconClass = (file: any) => {
-  if (file.type === 'folder') {
-    return 'folder-icon'
-  }
+const getFileIconClass = (file: FileInfo) => {
+  const extension = getFileExtension(file.filename)
   
-  const extension = file.extension?.toLowerCase()
-  
-  if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg'].includes(extension)) {
+  if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg', 'webp'].includes(extension)) {
     return 'image-icon'
   }
   
-  if (['mp4', 'avi', 'mov', 'wmv', 'flv'].includes(extension)) {
+  if (['mp4', 'avi', 'mov', 'wmv', 'flv', 'mkv'].includes(extension)) {
     return 'video-icon'
   }
   
-  if (['mp3', 'wav', 'flac', 'aac'].includes(extension)) {
+  if (['mp3', 'wav', 'flac', 'aac', 'ogg'].includes(extension)) {
     return 'audio-icon'
   }
   
-  if (['doc', 'docx', 'pdf', 'txt', 'rtf'].includes(extension)) {
+  if (['doc', 'docx', 'pdf', 'txt', 'rtf', 'md'].includes(extension)) {
     return 'document-icon'
   }
   
@@ -576,12 +470,9 @@ const getFileIconClass = (file: any) => {
 }
 
 // 获取文件类型文本
-const getFileTypeText = (file: any) => {
-  if (file.type === 'folder') {
-    return '文件夹'
-  }
-  
-  return file.extension?.toUpperCase() || '文件'
+const getFileTypeText = (file: FileInfo) => {
+  const extension = getFileExtension(file.filename)
+  return extension ? extension.toUpperCase() : '文件'
 }
 
 // 格式化文件大小
@@ -619,11 +510,13 @@ const setViewMode = (mode: 'list' | 'grid') => {
 // 处理搜索
 const handleSearch = () => {
   currentPage.value = 1
+  fetchFiles()
 }
 
 // 处理排序
 const handleSort = () => {
-  // 排序逻辑已在计算属性中处理
+  currentPage.value = 1
+  fetchFiles()
 }
 
 // 切换排序顺序
@@ -647,42 +540,44 @@ const handleSelectionChange = (selection: any[]) => {
 }
 
 // 处理双击
-const handleDoubleClick = (file: any) => {
-  if (file.type === 'folder') {
-    navigateToPath(file.path.substring(1))
-  } else {
-    // 预览文件或下载
-    downloadFile(file)
-  }
+const handleDoubleClick = (file: FileInfo) => {
+  // 直接下载文件
+  downloadFile(file)
 }
 
 // 下载文件
-const downloadFile = (file: any) => {
-  // 创建下载链接
-  const link = document.createElement('a')
-  link.href = `${import.meta.env.VITE_API_BASE_URL}/files/download/${file.id}`
-  link.download = file.name
-  link.target = '_blank'
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  
-  ElMessage.success('开始下载文件')
+const downloadFile = async (file: FileInfo) => {
+  try {
+    const response = await filesApi.downloadFile(file.id)
+    
+    // 创建下载链接
+    const url = window.URL.createObjectURL(new Blob([response.data]))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = file.original_name || file.filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    
+    ElMessage.success('开始下载文件')
+  } catch (error) {
+    ElMessage.error('下载文件失败')
+  }
 }
 
-// 显示重命名对话框
-const showRenameDialog = (file: any) => {
-  renameForm.name = file.name
-  renameForm.id = file.id
-  renameForm.type = file.type
-  showRenameDialog.value = true
-}
+// 显示重命名对话框 (暂时移除)
+// const showRenameDialog = (file: FileInfo) => {
+//   renameForm.name = file.original_name || file.filename
+//   renameForm.id = file.id
+//   showRenameDialog.value = true
+// }
 
 // 删除文件
-const deleteFile = async (file: any) => {
+const deleteFile = async (file: FileInfo) => {
   try {
     await ElMessageBox.confirm(
-      `确定要删除${file.type === 'folder' ? '文件夹' : '文件'} "${file.name}" 吗？`,
+      `确定要删除文件 "${file.original_name || file.filename}" 吗？`,
       '确认删除',
       {
         confirmButtonText: '确定',
@@ -691,7 +586,7 @@ const deleteFile = async (file: any) => {
       }
     )
     
-    // TODO: 调用删除API
+    await filesApi.deleteFile(file.id)
     ElMessage.success('删除成功')
     fetchFiles()
   } catch {
@@ -708,7 +603,11 @@ const createFolder = async () => {
     await formRef.validate()
     creating.value = true
     
-    // TODO: 调用创建文件夹API
+    // TODO: 实现创建文件夹API
+    // await filesApi.createFolder({
+    //   name: folderForm.name,
+    //   path: currentPath.value
+    // })
     await new Promise(resolve => setTimeout(resolve, 1000))
     
     ElMessage.success('文件夹创建成功')
@@ -724,46 +623,49 @@ const createFolder = async () => {
   }
 }
 
-// 重命名文件
-const renameFile = async () => {
-  const formRef = renameFormRef.value
-  if (!formRef) return
-  
-  try {
-    await formRef.validate()
-    renaming.value = true
-    
-    // TODO: 调用重命名API
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    
-    ElMessage.success('重命名成功')
-    showRenameDialog.value = false
-    fetchFiles()
-  } catch (error) {
-    if (error !== false) {
-      ElMessage.error('重命名失败')
-    }
-  } finally {
-    renaming.value = false
-  }
-}
+// 重命名文件 (暂时移除)
+// const renameFile = async () => {
+//   const formRef = renameFormRef.value
+//   if (!formRef) return
+//   
+//   try {
+//     await formRef.validate()
+//     renaming.value = true
+//     
+//     await filesApi.renameFile(renameForm.id, {
+//       name: renameForm.name
+//     })
+//     
+//     ElMessage.success('重命名成功')
+//     showRenameDialog.value = false
+//     fetchFiles()
+//   } catch (error) {
+//     if (error !== false) {
+//       ElMessage.error('重命名失败')
+//     }
+//   } finally {
+//     renaming.value = false
+//   }
+// }
 
 // 处理分页大小变化
 const handleSizeChange = (size: number) => {
   pageSize.value = size
   currentPage.value = 1
+  fetchFiles()
 }
 
 // 处理当前页变化
 const handleCurrentChange = (page: number) => {
   currentPage.value = page
+  fetchFiles()
 }
 
 // 上传前检查
 const beforeUpload = (file: File) => {
-  const maxSize = 100 * 1024 * 1024 // 100MB
+  const isLt100M = file.size / 1024 / 1024 < 100
   
-  if (file.size > maxSize) {
+  if (!isLt100M) {
     ElMessage.error('文件大小不能超过 100MB')
     return false
   }
@@ -771,16 +673,23 @@ const beforeUpload = (file: File) => {
   return true
 }
 
-// 处理上传成功
+// 上传成功处理
 const handleUploadSuccess = (response: any, file: any) => {
-  ElMessage.success(`文件 "${file.name}" 上传成功`)
-  fetchFiles()
+  if (response.success) {
+    ElMessage.success(`${file.name} 上传成功`)
+    fetchFiles()
+  } else {
+    ElMessage.error(response.message || `${file.name} 上传失败`)
+  }
 }
 
-// 处理上传错误
+// 上传失败处理
 const handleUploadError = (error: any, file: any) => {
-  ElMessage.error(`文件 "${file.name}" 上传失败`)
+  console.error('上传失败:', error)
+  ElMessage.error(`${file.name} 上传失败`)
 }
+
+// 重复的工具函数已在上方定义
 
 // 刷新文件列表
 const refreshFiles = () => {
@@ -792,8 +701,18 @@ const refreshFiles = () => {
 const fetchFiles = async () => {
   loading.value = true
   try {
-    // TODO: 调用获取文件列表API
-    await new Promise(resolve => setTimeout(resolve, 500))
+    const params = {
+      page: currentPage.value,
+      page_size: pageSize.value,
+      path: currentPath.value,
+      search: searchKeyword.value,
+      sort_by: sortBy.value,
+      sort_order: sortOrder.value
+    }
+    
+    const response = await filesApi.getFiles(params)
+    files.value = response.data.files
+    total.value = response.data.total
   } catch (error) {
     ElMessage.error('获取文件列表失败')
   } finally {
