@@ -7,6 +7,7 @@ class Task {
       title,
       description,
       priority = 'medium',
+      start_date,
       due_date,
       assigned_to,
       created_by,
@@ -19,13 +20,13 @@ class Task {
     return await transaction(async (connection) => {
       // 插入任务
       const taskSql = `
-        INSERT INTO tasks (title, description, priority, due_date, assigned_to, created_by, 
+        INSERT INTO tasks (title, description, priority, start_date, due_date, assigned_to, created_by, 
                           category, estimated_hours, status, progress, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now', 'localtime'))
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now', 'localtime'))
       `;
       
       const taskResult = await query(taskSql, [
-        title, description, priority, due_date, assigned_to, created_by, category, estimated_hours, status // 使用 status
+        title, description, priority, start_date, due_date, assigned_to, created_by, category, estimated_hours, status // 使用 status
       ]);
       
       const taskId = taskResult.insertId || taskResult.lastID;
@@ -210,7 +211,7 @@ class Task {
   // 更新任务
   static async update(id, updateData, userId) {
     const allowedFields = [
-      'title', 'description', 'priority', 'status', 'due_date', 
+      'title', 'description', 'priority', 'status', 'start_date', 'due_date', 
       'assigned_to', 'category', 'estimated_hours', 'actual_hours', 'progress'
     ];
     

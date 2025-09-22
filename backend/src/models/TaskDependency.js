@@ -30,15 +30,15 @@ class TaskDependency {
           pt.title as predecessor_title,
           pt.status as predecessor_status,
           pt.start_date as predecessor_start_date,
-          pt.end_date as predecessor_end_date,
+          pt.due_date as predecessor_end_date,
           st.title as successor_title,
           st.status as successor_status,
           st.start_date as successor_start_date,
-          st.end_date as successor_end_date
+          st.due_date as successor_end_date
         FROM task_dependencies td
-        LEFT JOIN tasks pt ON td.predecessor_task_id = pt.id
-        LEFT JOIN tasks st ON td.successor_task_id = st.id
-        WHERE td.predecessor_task_id = ? OR td.successor_task_id = ?
+        LEFT JOIN tasks pt ON td.predecessor_id = pt.id
+        LEFT JOIN tasks st ON td.successor_id = st.id
+        WHERE td.predecessor_id = ? OR td.successor_id = ?
         ORDER BY td.created_at DESC
       `;
       
@@ -61,14 +61,14 @@ class TaskDependency {
           pt.title as predecessor_title,
           pt.status as predecessor_status,
           pt.start_date as predecessor_start_date,
-          pt.end_date as predecessor_end_date,
+          pt.due_date as predecessor_end_date,
           st.title as successor_title,
           st.status as successor_status,
           st.start_date as successor_start_date,
-          st.end_date as successor_end_date
+          st.due_date as successor_end_date
         FROM task_dependencies td
-        LEFT JOIN tasks pt ON td.predecessor_task_id = pt.id
-        LEFT JOIN tasks st ON td.successor_task_id = st.id
+        LEFT JOIN tasks pt ON td.predecessor_id = pt.id
+        LEFT JOIN tasks st ON td.successor_id = st.id
         WHERE pt.project_id = ? OR st.project_id = ?
         ORDER BY td.created_at DESC
       `;

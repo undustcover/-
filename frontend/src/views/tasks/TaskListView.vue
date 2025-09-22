@@ -37,6 +37,7 @@
             <el-option label="进行中" value="in_progress" />
             <el-option label="已完成" value="completed" />
             <el-option label="已取消" value="cancelled" />
+            <el-option label="逾期任务" value="overdue" />
           </el-select>
         </div>
         
@@ -202,7 +203,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, Refresh } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
@@ -213,6 +214,7 @@ import type { Task } from '@/types/task'
 import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const route = useRoute()
 const tasksStore = useTasksStore()
 const authStore = useAuthStore()
 
@@ -473,6 +475,26 @@ const fetchTasks = async () => {
 }
 
 onMounted(() => {
+  // 处理URL查询参数
+  const query = route.query
+  if (query.status) {
+    filters.status = query.status as string
+  }
+  if (query.overdue === 'true') {
+    // 对于逾期任务，可以通过添加特殊标识来处理
+    // 这里暂时设置一个特殊状态，后续可以在fetchTasks中处理
+    filters.status = 'overdue'
+  }
+  
+  // 应用筛选条件
+  if (filters.status || filters.priority || filters.assigned_to) {
+    tasksStore.setFilter({
+      status: filters.status === 'overdue' ? '' : filters.status,
+      priority: filters.priority,
+      assigned_to: filters.assigned_to
+    })
+  }
+  
   fetchTasks()
 })
 

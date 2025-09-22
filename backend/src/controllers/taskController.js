@@ -455,20 +455,34 @@ const addTaskComment = async (req, res) => {
 // 获取甘特图数据
 const getGanttData = async (req, res) => {
   try {
-    const { project_id, start_date, end_date } = req.query;
+    const { project_id, start_date, end_date, assignee_id, category } = req.query;
     const userId = req.user.id;
     
     let whereConditions = [];
     let params = [];
     
-    // 添加权限过滤
-    whereConditions.push('(t.created_by = ? OR t.assigned_to = ? OR t.visibility = "public")');
-    params.push(userId, userId);
+    // 添加权限过滤 - 与任务列表API保持一致
+    if (req.user.role !== 'admin' && req.user.role !== 'super_admin' && req.user.role !== 'manager') {
+      whereConditions.push('(t.created_by = ? OR t.assigned_to = ?)');
+      params.push(userId, userId);
+    }
     
     // 项目筛选
     if (project_id) {
       whereConditions.push('t.project_id = ?');
       params.push(project_id);
+    }
+    
+    // 负责人筛选
+    if (assignee_id) {
+      whereConditions.push('t.assigned_to = ?');
+      params.push(assignee_id);
+    }
+    
+    // 项目类别筛选
+    if (category) {
+      whereConditions.push('t.category = ?');
+      params.push(category);
     }
     
     // 时间范围筛选
@@ -487,14 +501,12 @@ const getGanttData = async (req, res) => {
         t.status,
         t.priority,
         t.start_date,
-        t.end_date,
+        t.due_date as end_date,
         t.progress,
         t.assigned_to,
         t.created_by,
-        t.project_id,
-        t.parent_task_id,
-        u.username as assignee_name,
-        creator.username as creator_name
+        u.real_name as assignee_name,
+        creator.real_name as creator_name
       FROM tasks t
       LEFT JOIN users u ON t.assigned_to = u.id
       LEFT JOIN users creator ON t.created_by = creator.id

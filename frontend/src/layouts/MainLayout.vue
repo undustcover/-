@@ -112,7 +112,7 @@
       </el-header>
       
       <!-- 主内容 -->
-      <el-main class="main-content">
+      <el-main class="main-content" :class="{ 'no-padding': $route.path === '/gantt' }">
         <router-view v-slot="{ Component }">
           <transition name="fade" mode="out-in">
             <component :is="Component" />
@@ -253,12 +253,14 @@ watch(
 <style scoped>
 .main-layout {
   height: 100vh;
+  overflow: hidden; /* 防止整体页面滚动 */
 }
 
 .sidebar {
   background-color: #304156;
   transition: width 0.3s;
   overflow: hidden;
+  flex-shrink: 0; /* 防止侧边栏被压缩 */
 }
 
 .logo {
@@ -312,6 +314,8 @@ watch(
   align-items: center;
   justify-content: space-between;
   padding: 0 16px;
+  height: 60px; /* 固定header高度 */
+  flex-shrink: 0; /* 防止header被压缩 */
 }
 
 .header-left {
@@ -366,6 +370,32 @@ watch(
   background-color: #f5f7fa;
   padding: 20px;
   overflow-y: auto;
+  flex: 1; /* 占满剩余空间 */
+  min-height: 0; /* 允许flex子项收缩 */
+}
+
+.main-content.no-padding {
+  padding: 0 !important;
+  overflow: hidden !important; /* 完全交由甘特图内部管理滚动 */
+  display: flex !important;
+  flex-direction: column !important;
+  background-color: #ffffff !important; /* 甘特图页面使用白色背景 */
+}
+
+/* 为甘特图页面特别优化的全屏布局 */
+.main-layout:has(.main-content.no-padding) {
+  .header {
+    height: 50px; /* 甘特图页面减小header高度 */
+    padding: 0 12px; /* 减小左右padding */
+  }
+  
+  .sidebar {
+    width: 180px !important; /* 甘特图页面时缩小侧边栏 */
+  }
+  
+  .sidebar.collapsed {
+    width: 50px !important;
+  }
 }
 
 /* 页面切换动画 */

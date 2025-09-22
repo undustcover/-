@@ -80,5 +80,16 @@ export const taskApi = {
   // 获取任务评论
   getTaskComments(id: string) {
     return request.get(`/tasks/${id}/comments`)
+  },
+
+  // 获取甘特图数据
+  getGanttData(params?: { 
+    project_id?: string; 
+    start_date?: string; 
+    end_date?: string; 
+    assignee_id?: string;
+    category?: string;
+  }) {
+    return request.get('/tasks/gantt/data', { params })
   }
 }

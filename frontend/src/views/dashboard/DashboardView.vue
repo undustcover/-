@@ -6,7 +6,7 @@
     
     <!-- 统计卡片 -->
     <div class="stats-grid">
-      <el-card class="stat-card">
+      <el-card class="stat-card clickable" @click="navigateToTasks('pending')">
         <div class="stat-content">
           <div class="stat-icon pending">
             <el-icon><Clock /></el-icon>
@@ -18,7 +18,7 @@
         </div>
       </el-card>
       
-      <el-card class="stat-card">
+      <el-card class="stat-card clickable" @click="navigateToTasks('in_progress')">
         <div class="stat-content">
           <div class="stat-icon progress">
             <el-icon><Loading /></el-icon>
@@ -30,7 +30,7 @@
         </div>
       </el-card>
       
-      <el-card class="stat-card">
+      <el-card class="stat-card clickable" @click="navigateToTasks('completed')">
         <div class="stat-content">
           <div class="stat-icon completed">
             <el-icon><Check /></el-icon>
@@ -42,7 +42,7 @@
         </div>
       </el-card>
       
-      <el-card class="stat-card">
+      <el-card class="stat-card clickable" @click="navigateToTasks('overdue')">
         <div class="stat-content">
           <div class="stat-icon overdue">
             <el-icon><Warning /></el-icon>
@@ -135,6 +135,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { Clock, Loading, Check, Warning, DocumentRemove, Bell } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
@@ -146,6 +147,7 @@ import { useAuthStore } from '@/stores/auth'
 dayjs.extend(relativeTime)
 dayjs.locale('zh-cn')
 
+const router = useRouter()
 const authStore = useAuthStore()
 
 // 响应式数据
@@ -216,6 +218,31 @@ const formatTime = (time: string) => {
   return dayjs(time).fromNow()
 }
 
+// 导航到任务页面并应用筛选
+const navigateToTasks = (filterType: string) => {
+  const query: any = {}
+  
+  switch (filterType) {
+    case 'pending':
+      query.status = 'pending'
+      break
+    case 'in_progress':
+      query.status = 'in_progress'
+      break
+    case 'completed':
+      query.status = 'completed'
+      break
+    case 'overdue':
+      query.overdue = 'true'
+      break
+  }
+  
+  router.push({
+    path: '/tasks',
+    query
+  })
+}
+
 // 获取仪表板数据（真实接口）
 const fetchDashboardData = async () => {
   loading.value = true
@@ -282,11 +309,16 @@ watch(() => authStore.user, () => {
 
 .stat-card {
   cursor: pointer;
-  transition: transform 0.2s;
+  transition: all 0.2s ease;
 }
 
-.stat-card:hover {
+.stat-card.clickable {
+  cursor: pointer;
+}
+
+.stat-card.clickable:hover {
   transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .stat-content {
