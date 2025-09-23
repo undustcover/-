@@ -202,29 +202,7 @@
           </el-form-item>
         </el-col>
         
-        <el-col :span="24">
-          <el-form-item label="附件上传">
-            <el-upload
-              ref="uploadRef"
-              :file-list="fileList"
-              :auto-upload="false"
-              :on-change="handleFileChange"
-              :on-remove="handleFileRemove"
-              multiple
-              drag
-            >
-              <el-icon class="el-icon--upload"><upload-filled /></el-icon>
-              <div class="el-upload__text">
-                将文件拖到此处，或<em>点击上传</em>
-              </div>
-              <template #tip>
-                <div class="el-upload__tip">
-                  支持多文件上传，单个文件大小不超过10MB
-                </div>
-              </template>
-            </el-upload>
-          </el-form-item>
-        </el-col>
+
         
         <el-col :span="24">
           <el-form-item label="通知设置">
@@ -252,11 +230,10 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { UploadFilled } from '@element-plus/icons-vue'
 import { usersApi } from '@/api/users'
 import { useAuthStore } from '@/stores/auth'
 import { useTasksStore } from '@/stores/tasks'
-import type { FormInstance, FormRules, UploadFile, UploadFiles } from 'element-plus'
+import type { FormInstance, FormRules } from 'element-plus'
 import type { Task, User } from '@/types/task'
 
 // 获取store
@@ -287,7 +264,6 @@ const emit = defineEmits<Emits>()
 // 响应式数据
 const formRef = ref<FormInstance>()
 const inputRef = ref()
-const uploadRef = ref()
 const submitLoading = ref(false)
 const userLoading = ref(false)
 const taskLoading = ref(false)
@@ -295,7 +271,6 @@ const inputVisible = ref(false)
 const inputValue = ref('')
 const userList = ref<User[]>([])
 const taskList = ref<Task[]>([])
-const fileList = ref<UploadFile[]>([])
 
 // 表单数据
 const formData = ref({
@@ -462,22 +437,7 @@ const removeTag = (tag: string) => {
   }
 }
 
-// 处理文件变化
-const handleFileChange = (file: UploadFile, files: UploadFiles) => {
-  // 检查文件大小
-  if (file.size && file.size > 10 * 1024 * 1024) {
-    ElMessage.error('文件大小不能超过10MB')
-    files.splice(files.indexOf(file), 1)
-    return
-  }
-  
-  fileList.value = files
-}
 
-// 处理文件移除
-const handleFileRemove = (file: UploadFile, files: UploadFiles) => {
-  fileList.value = files
-}
 
 // 重置表单
 const resetForm = () => {
@@ -496,7 +456,6 @@ const resetForm = () => {
     related_tasks: [],
     notifications: ['system']
   }
-  fileList.value = []
   formRef.value?.clearValidate()
 }
 
@@ -517,9 +476,6 @@ const fillFormData = (task: Task) => {
     related_tasks: (task as any).related_tasks || [],
     notifications: (task as any).notifications || ['system']
   }
-  
-  // TODO: 加载任务附件
-  fileList.value = []
 }
 
 // 分类映射函数

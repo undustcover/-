@@ -141,7 +141,7 @@
               <el-icon><Document /></el-icon>
             </div>
             <div class="attachment-info">
-              <div class="attachment-name">{{ attachment.filename }}</div>
+              <div class="attachment-name">{{ attachment.original_name || attachment.filename }}</div>
               <div class="attachment-meta">
                 <span class="attachment-size">{{ formatFileSize(attachment.size) }}</span>
                 <span class="attachment-time">{{ formatDateTime(attachment.created_at) }}</span>
@@ -234,6 +234,7 @@ import {
 import dayjs from 'dayjs'
 import TaskEditDialog from './TaskEditDialog.vue'
 import type { Task, TaskComment } from '@/types/task'
+import { filesApi } from '@/api/files'
 import { useAuthStore } from '@/stores/auth'
 
 // Props
@@ -368,9 +369,35 @@ const deleteTask = async () => {
 }
 
 // 下载附件
-const downloadAttachment = (attachment: any) => {
-  // TODO: 实现附件下载
-  ElMessage.info('下载功能开发中')
+const downloadAttachment = async (attachment: any) => {
+  try {
+    const response = await filesApi.downloadFile(attachment.id)
+    
+    // 确保响应数据是blob类型
+    let blob: Blob
+    if (response.data instanceof Blob) {
+      blob = response.data
+    } else {
+      // 如果不是blob，创建一个新的blob
+      blob = new Blob([response.data], { type: attachment.mime_type || 'application/octet-stream' })
+    }
+    
+    // 创建下载链接
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = attachment.original_name || attachment.filename
+    link.style.display = 'none'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    
+    ElMessage.success('下载成功')
+  } catch (error) {
+    console.error('下载失败:', error)
+    ElMessage.error(`下载失败: ${error.message || '未知错误'}`)
+  }
 }
 
 // 添加评论

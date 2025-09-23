@@ -61,7 +61,8 @@ export const filesApi = {
   // 下载文件
   downloadFile: (fileId: string): Promise<AxiosResponse<Blob>> => {
     return request.get(`/files/download/${fileId}`, {
-      responseType: 'blob'
+      responseType: 'blob',
+      timeout: 30000 // 增加超时时间到30秒
     })
   },
 

@@ -27,23 +27,35 @@ const storage = multer.diskStorage({
   }
 });
 
-// 文件过滤器
-const fileFilter = (req, file, cb) => {
-  const allowedTypes = (process.env.ALLOWED_FILE_TYPES || 'jpg,jpeg,png,gif,pdf,doc,docx,xls,xlsx,ppt,pptx,txt,zip,rar').split(',');
-  const ext = path.extname(file.originalname).toLowerCase().slice(1);
-  
-  if (allowedTypes.includes(ext)) {
-    cb(null, true);
-  } else {
-    cb(new Error(`不支持的文件类型: ${ext}`), false);
-  }
-};
+// 文件过滤器已移至multer配置中
 
 const upload = multer({
   storage,
-  fileFilter,
   limits: {
     fileSize: parseInt(process.env.MAX_FILE_SIZE) || 10 * 1024 * 1024 // 默认10MB
+  },
+  // 确保正确处理中文文件名
+  preservePath: false,
+  fileFilter: (req, file, cb) => {
+    // 处理中文文件名编码
+    if (file.originalname) {
+      try {
+        // 尝试修复可能的编码问题
+        const originalBuffer = Buffer.from(file.originalname, 'latin1');
+        file.originalname = originalBuffer.toString('utf8');
+      } catch (error) {
+        console.log('文件名编码处理失败:', error.message);
+      }
+    }
+    
+    const allowedTypes = (process.env.ALLOWED_FILE_TYPES || 'jpg,jpeg,png,gif,pdf,doc,docx,xls,xlsx,ppt,pptx,txt,zip,rar').split(',');
+    const ext = path.extname(file.originalname).toLowerCase().slice(1);
+    
+    if (allowedTypes.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`不支持的文件类型: ${ext}`), false);
+    }
   }
 });
 
@@ -60,6 +72,25 @@ router.post('/upload',
       const userId = req.user.id;
       
       // 保存文件信息到数据库
+      // 处理可能的中文文件名编码问题
+      let originalName = req.file.originalname;
+      
+      // 检测并修复编码问题
+      try {
+        // 如果文件名包含乱码字符，尝试重新编码
+        if (originalName.includes('�') || /[\x80-\xFF]/.test(originalName)) {
+          // 尝试从ISO-8859-1转换为UTF-8
+          const buffer = Buffer.from(originalName, 'binary');
+          originalName = buffer.toString('utf8');
+          console.log('文件名编码修复:', req.file.originalname, '->', originalName);
+        }
+      } catch (error) {
+        console.log('文件名编码修复失败:', error.message);
+        originalName = req.file.originalname; // 使用原始名称
+      }
+      
+      console.log('最终文件名:', originalName);
+      
       const sql = `
         INSERT INTO task_files (task_id, uploaded_by, original_name, filename, file_path, file_size, mime_type, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
@@ -68,7 +99,7 @@ router.post('/upload',
       const params = [
         task_id || null,
         userId,
-        req.file.originalname,
+        originalName, // 使用修复后的文件名
         req.file.filename,
         req.file.path,
         req.file.size,
@@ -194,8 +225,17 @@ router.get('/download/:id', async (req, res) => {
       return res.status(404).json({ error: '文件已被删除' });
     }
     
-    // 设置响应头
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(file.original_name)}"`);
+    // 设置响应头，正确处理中文文件名
+    // 移除文件名中的所有可能导致HTTP头部错误的特殊字符
+    const safeFilename = file.original_name
+      .replace(/[\r\n\t]/g, '_')  // 将换行符、回车符、制表符替换为下划线
+      .replace(/[\\"']/g, '')  // 移除引号
+      .replace(/[\x00-\x1f\x7f-\x9f]/g, '')  // 移除控制字符
+      .trim(); // 移除首尾空格
+    
+    // 使用更安全的方式设置Content-Disposition，只使用UTF-8编码的filename*参数
+    const encodedFilename = encodeURIComponent(safeFilename);
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedFilename}`);
     res.setHeader('Content-Type', file.mime_type);
     
     // 发送文件

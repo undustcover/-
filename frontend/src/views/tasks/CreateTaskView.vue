@@ -212,31 +212,7 @@
           </el-col>
         </el-row>
         
-        <el-form-item label="附件">
-          <el-upload
-            ref="uploadRef"
-            class="upload-demo"
-            drag
-            :action="uploadUrl"
-            :headers="uploadHeaders"
-            multiple
-            :on-success="handleUploadSuccess"
-            :on-error="handleUploadError"
-            :on-remove="handleRemoveFile"
-            :file-list="fileList"
-            :before-upload="beforeUpload"
-          >
-            <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
-            <div class="el-upload__text">
-              将文件拖到此处，或<em>点击上传</em>
-            </div>
-            <template #tip>
-              <div class="el-upload__tip">
-                支持jpg/png/gif/pdf/doc/docx/xls/xlsx文件，且不超过10MB
-              </div>
-            </template>
-          </el-upload>
-        </el-form-item>
+
         
         <el-form-item label="通知设置">
           <el-checkbox-group v-model="form.notifications">
@@ -273,17 +249,19 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, type FormInstance, type FormRules, type UploadInstance } from 'element-plus'
-import { ArrowLeft, UploadFilled } from '@element-plus/icons-vue'
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { ArrowLeft } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { useAuthStore } from '@/stores/auth'
+import { useTasksStore } from '@/stores/tasks'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const tasksStore = useTasksStore()
 
 // 响应式数据
 const formRef = ref<FormInstance>()
-const uploadRef = ref<UploadInstance>()
+
 const submitLoading = ref(false)
 const draftLoading = ref(false)
 const userLoading = ref(false)
@@ -301,15 +279,13 @@ const form = reactive({
   estimated_hours: 1,
   tags: [],
   related_tasks: [],
-  attachments: [],
   notifications: ['system'],
   is_urgent: false,
   is_private: false,
   auto_assign: false
 })
 
-// 文件列表
-const fileList = ref([])
+
 
 // 用户列表
 const users = ref([
@@ -353,16 +329,7 @@ const availableTags = ref([
   '前端', '后端', '数据库', '测试', '部署', '优化', '修复', '新功能'
 ])
 
-// 计算属性
-const uploadUrl = computed(() => {
-  return `${import.meta.env.VITE_API_BASE_URL}/upload`
-})
 
-const uploadHeaders = computed(() => {
-  return {
-    Authorization: `Bearer ${authStore.token}`
-  }
-})
 
 // 表单验证规则
 const rules: FormRules = {
@@ -443,55 +410,7 @@ const searchTasks = async (query: string) => {
   }
 }
 
-// 上传前检查
-const beforeUpload = (file: File) => {
-  const allowedTypes = [
-    'image/jpeg', 'image/png', 'image/gif',
-    'application/pdf',
-    'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/vnd.ms-excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-  ]
-  
-  const isAllowedType = allowedTypes.includes(file.type)
-  const isLt10M = file.size / 1024 / 1024 < 10
-  
-  if (!isAllowedType) {
-    ElMessage.error('只能上传 JPG/PNG/GIF/PDF/DOC/DOCX/XLS/XLSX 格式的文件')
-    return false
-  }
-  
-  if (!isLt10M) {
-    ElMessage.error('文件大小不能超过 10MB')
-    return false
-  }
-  
-  return true
-}
 
-// 上传成功
-const handleUploadSuccess = (response: any, file: any) => {
-  form.attachments.push({
-    name: file.name,
-    url: response.url,
-    size: file.size
-  })
-  ElMessage.success('文件上传成功')
-}
-
-// 上传失败
-const handleUploadError = () => {
-  ElMessage.error('文件上传失败')
-}
-
-// 移除文件
-const handleRemoveFile = (file: any) => {
-  const index = form.attachments.findIndex(item => item.name === file.name)
-  if (index > -1) {
-    form.attachments.splice(index, 1)
-  }
-}
 
 // 保存草稿
 const saveDraft = async () => {
@@ -519,11 +438,17 @@ const submitTask = async () => {
     // 准备提交数据
     const submitData = {
       ...form,
-      creator: authStore.user?.id
+      creator: authStore.user?.id,
+      // 只传递附件ID给后端
+      attachment_ids: form.attachments.map(att => att.id).filter(Boolean)
     }
     
-    // TODO: 调用API创建任务
-    await new Promise(resolve => setTimeout(resolve, 1500))
+    // 移除attachments字段，避免传递冗余数据
+    delete submitData.attachments
+    
+    // 调用API创建任务
+    console.log('提交任务数据:', submitData)
+    await tasksStore.createTask(submitData)
     
     ElMessage.success('任务创建成功')
     router.push('/tasks')

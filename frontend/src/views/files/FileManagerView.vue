@@ -550,19 +550,30 @@ const downloadFile = async (file: FileInfo) => {
   try {
     const response = await filesApi.downloadFile(file.id)
     
+    // 确保响应数据是blob类型
+    let blob: Blob
+    if (response.data instanceof Blob) {
+      blob = response.data
+    } else {
+      // 如果不是blob，创建一个新的blob
+      blob = new Blob([response.data], { type: file.mime_type || 'application/octet-stream' })
+    }
+    
     // 创建下载链接
-    const url = window.URL.createObjectURL(new Blob([response.data]))
+    const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
     link.download = file.original_name || file.filename
+    link.style.display = 'none'
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
     
-    ElMessage.success('开始下载文件')
+    ElMessage.success('文件下载成功')
   } catch (error) {
-    ElMessage.error('下载文件失败')
+    console.error('文件下载失败:', error)
+    ElMessage.error(`文件下载失败: ${error.message || '未知错误'}`)
   }
 }
 

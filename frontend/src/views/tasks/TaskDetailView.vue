@@ -133,12 +133,59 @@
           </el-card>
           
           <!-- 附件列表 -->
-          <el-card v-if="task.attachments?.length" class="attachments-card">
+          <el-card class="attachments-card">
             <template #header>
-              <span>附件 ({{ task.attachments.length }})</span>
+              <div class="attachments-header">
+                <span>附件 ({{ task.attachments?.length || 0 }})</span>
+                <el-button v-if="canEdit" type="primary" size="small" @click="triggerFileUpload">
+                  <el-icon><Upload /></el-icon>
+                  上传文件
+                </el-button>
+              </div>
             </template>
             
-            <div class="attachments-list">
+            <!-- 文件上传组件 -->
+            <div v-if="canEdit" class="upload-section">
+              <el-upload
+                 ref="uploadRef"
+                 :action="uploadAction"
+                 :headers="uploadHeaders"
+                 :data="uploadData"
+                 :on-success="handleUploadSuccess"
+                 :on-error="handleUploadError"
+                 :on-progress="handleUploadProgress"
+                 :before-upload="beforeUpload"
+                 :show-file-list="false"
+                 :auto-upload="true"
+                 multiple
+                 drag
+                 class="upload-dragger"
+               >
+                <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
+                <div class="el-upload__text">
+                  将文件拖拽到此处，或<em>点击上传</em>
+                </div>
+                <template #tip>
+                  <div class="el-upload__tip">
+                    支持 jpg/png/gif/pdf/doc/docx/xls/xlsx/ppt/pptx/txt/zip/rar 格式，单个文件不超过 10MB
+                  </div>
+                </template>
+              </el-upload>
+              
+              <!-- 上传进度 -->
+              <div v-if="uploadProgress.length > 0" class="upload-progress">
+                <div v-for="(progress, index) in uploadProgress" :key="index" class="progress-item">
+                  <div class="progress-info">
+                    <span class="file-name">{{ progress.fileName }}</span>
+                    <span class="progress-percent">{{ progress.percent }}%</span>
+                  </div>
+                  <el-progress :percentage="progress.percent" :status="progress.status" />
+                </div>
+              </div>
+            </div>
+            
+            <!-- 附件列表 -->
+            <div v-if="task.attachments?.length" class="attachments-list">
               <div
                 v-for="attachment in task.attachments"
                 :key="attachment.id"
@@ -148,7 +195,7 @@
                   <el-icon><Document /></el-icon>
                 </div>
                 <div class="attachment-info">
-                  <div class="attachment-name">{{ attachment.filename }}</div>
+                  <div class="attachment-name">{{ attachment.original_name || attachment.filename }}</div>
                   <div class="attachment-meta">
                     <span class="attachment-size">{{ formatFileSize(attachment.size) }}</span>
                     <span class="attachment-time">{{ formatDateTime(attachment.created_at) }}</span>
@@ -156,10 +203,20 @@
                 </div>
                 <div class="attachment-actions">
                   <el-button type="primary" text size="small" @click="downloadAttachment(attachment)">
+                    <el-icon><Download /></el-icon>
                     下载
+                  </el-button>
+                  <el-button v-if="canEdit" type="danger" text size="small" @click="deleteAttachment(attachment)">
+                    <el-icon><Delete /></el-icon>
+                    删除
                   </el-button>
                 </div>
               </div>
+            </div>
+            
+            <!-- 空状态 -->
+            <div v-if="!task.attachments?.length && !canEdit" class="empty-attachments">
+              <span class="text-placeholder">暂无附件</span>
             </div>
           </el-card>
         </div>
@@ -278,7 +335,10 @@ import {
   Edit,
   Delete,
   Loading,
-  Document
+  Document,
+  Download,
+  Upload,
+  UploadFilled
 } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { useTasksStore } from '@/stores/tasks'
@@ -286,6 +346,7 @@ import TaskEditDialog from '@/components/tasks/TaskEditDialog.vue'
 import MilestoneTimeline from '@/components/milestones/MilestoneTimeline.vue'
 import type { Task, TaskComment, TaskHistory } from '@/types/task'
 import { taskApi } from '@/api/tasks'
+import { filesApi } from '@/api/files'
 import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
@@ -299,6 +360,17 @@ const showEditDialog = ref(false)
 const newComment = ref('')
 const comments = ref<TaskComment[]>([])
 const taskHistory = ref<TaskHistory[]>([])
+const uploadRef = ref()
+const uploadProgress = ref<Array<{fileName: string, percent: number, status: string}>>([])
+
+// 文件上传配置
+const uploadAction = `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api'}/files/upload`
+const uploadHeaders = computed(() => ({
+  'Authorization': `Bearer ${authStore.token}`
+}))
+const uploadData = computed(() => ({
+  task_id: route.params.id
+}))
 
 // 计算属性
 const task = computed(() => tasksStore.currentTask)
@@ -418,9 +490,133 @@ const deleteTask = async () => {
 }
 
 // 下载附件
-const downloadAttachment = (attachment: any) => {
-  // TODO: 实现附件下载
-  ElMessage.info('下载功能开发中')
+const downloadAttachment = async (attachment: any) => {
+  try {
+    const response = await filesApi.downloadFile(attachment.id)
+    
+    // 确保响应数据是blob类型
+    let blob: Blob
+    if (response.data instanceof Blob) {
+      blob = response.data
+    } else {
+      // 如果不是blob，创建一个新的blob
+      blob = new Blob([response.data], { type: attachment.mime_type || 'application/octet-stream' })
+    }
+    
+    // 创建下载链接
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = attachment.original_name || attachment.filename
+    link.style.display = 'none'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    
+    ElMessage.success('下载成功')
+  } catch (error) {
+    console.error('下载失败:', error)
+    ElMessage.error(`下载失败: ${error.message || '未知错误'}`)
+  }
+}
+
+// 删除附件
+const deleteAttachment = async (attachment: any) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除附件「${attachment.original_name || attachment.filename}」吗？`,
+      '确认删除',
+      {
+        type: 'warning'
+      }
+    )
+    
+    await filesApi.deleteFile(attachment.id)
+    ElMessage.success('删除成功')
+    
+    // 重新获取任务详情以更新附件列表
+    fetchTaskDetail()
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('删除附件失败:', error)
+      ElMessage.error('删除失败')
+    }
+  }
+}
+
+// 触发文件上传
+const triggerFileUpload = () => {
+  uploadRef.value?.clearFiles()
+  const input = uploadRef.value?.$el.querySelector('input[type="file"]')
+  input?.click()
+}
+
+// 上传前验证
+const beforeUpload = (file: File) => {
+  const allowedTypes = ['jpg', 'jpeg', 'png', 'gif', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'zip', 'rar']
+  const fileExt = file.name.split('.').pop()?.toLowerCase()
+  
+  if (!fileExt || !allowedTypes.includes(fileExt)) {
+    ElMessage.error(`不支持的文件类型: ${fileExt}`)
+    return false
+  }
+  
+  const maxSize = 10 * 1024 * 1024 // 10MB
+  if (file.size > maxSize) {
+    ElMessage.error('文件大小不能超过 10MB')
+    return false
+  }
+  
+  // 添加到上传进度列表
+  uploadProgress.value.push({
+    fileName: file.name,
+    percent: 0,
+    status: 'uploading'
+  })
+  
+  return true
+}
+
+// 上传进度
+const handleUploadProgress = (event: any, file: any) => {
+  const progress = uploadProgress.value.find(p => p.fileName === file.name)
+  if (progress) {
+    progress.percent = Math.round(event.percent)
+  }
+}
+
+// 上传成功
+const handleUploadSuccess = (response: any, file: any) => {
+  const progress = uploadProgress.value.find(p => p.fileName === file.name)
+  if (progress) {
+    progress.percent = 100
+    progress.status = 'success'
+  }
+  
+  ElMessage.success(`文件 ${file.name} 上传成功`)
+  
+  // 延迟清除进度并刷新任务详情
+  setTimeout(() => {
+    uploadProgress.value = uploadProgress.value.filter(p => p.fileName !== file.name)
+    fetchTaskDetail()
+  }, 1500)
+}
+
+// 上传失败
+const handleUploadError = (error: any, file: any) => {
+  const progress = uploadProgress.value.find(p => p.fileName === file.name)
+  if (progress) {
+    progress.status = 'exception'
+  }
+  
+  console.error('文件上传失败:', error)
+  ElMessage.error(`文件 ${file.name} 上传失败`)
+  
+  // 延迟清除进度
+  setTimeout(() => {
+    uploadProgress.value = uploadProgress.value.filter(p => p.fileName !== file.name)
+  }, 3000)
 }
 
 // 添加评论
@@ -597,6 +793,46 @@ const canDelete = computed(() => {
   padding: 40px 0;
 }
 
+.attachments-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.upload-section {
+  margin-bottom: 20px;
+}
+
+.upload-dragger {
+  width: 100%;
+}
+
+.upload-progress {
+  margin-top: 16px;
+}
+
+.progress-item {
+  margin-bottom: 12px;
+}
+
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.file-name {
+  font-size: 14px;
+  color: var(--el-text-color-primary);
+  font-weight: 500;
+}
+
+.progress-percent {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
 .attachments-list {
   display: flex;
   flex-direction: column;
@@ -611,6 +847,12 @@ const canDelete = computed(() => {
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 6px;
   transition: border-color 0.2s;
+}
+
+.empty-attachments {
+  text-align: center;
+  padding: 40px 0;
+  color: var(--el-text-color-secondary);
 }
 
 .attachment-item:hover {

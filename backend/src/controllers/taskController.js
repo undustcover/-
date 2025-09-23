@@ -10,13 +10,15 @@ const createTask = async (req, res) => {
       title,
       description,
       priority,
+      start_date,
       due_date,
       assigned_to,
       assignee_id,
       category,
       tags,
       estimated_hours,
-      status // 获取 status
+      status, // 获取 status
+      attachment_ids // 获取附件ID数组
     } = req.body;
     
     // 兼容前端字段名
@@ -36,6 +38,7 @@ const createTask = async (req, res) => {
       title,
       description,
       priority,
+      start_date,
       due_date,
       assigned_to: finalAssignedTo,
       created_by,
@@ -44,6 +47,22 @@ const createTask = async (req, res) => {
       estimated_hours,
       status // 传递 status
     });
+    
+    // 如果有附件，将附件关联到任务
+    if (attachment_ids && attachment_ids.length > 0) {
+      for (const fileId of attachment_ids) {
+        await query(
+          'INSERT INTO task_files (task_id, file_id, created_at) VALUES (?, ?, NOW())',
+          [taskId, fileId]
+        );
+        
+        // 更新文件表中的task_id字段
+        await query(
+          'UPDATE files SET task_id = ? WHERE id = ?',
+          [taskId, fileId]
+        );
+      }
+    }
     
     // 获取创建的任务详情
     const task = await Task.findById(taskId);

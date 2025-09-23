@@ -83,6 +83,18 @@ class Task {
       }
     }
     
+    // 查询任务的附件（使用当前的task_files表结构）
+    const attachmentsSql = `
+      SELECT tf.id, tf.filename, tf.original_name, tf.file_size as size, 
+             tf.mime_type, tf.created_at
+      FROM task_files tf
+      WHERE tf.task_id = ?
+      ORDER BY tf.created_at DESC
+    `;
+    
+    const attachments = await query(attachmentsSql, [id]);
+    task.attachments = attachments || [];
+    
     return task;
   }
 

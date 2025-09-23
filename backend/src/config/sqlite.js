@@ -156,6 +156,37 @@ const createTables = () => {
       )
     `;
     
+    const createFilesTable = `
+      CREATE TABLE IF NOT EXISTS files (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        filename VARCHAR(255) NOT NULL,
+        original_name VARCHAR(255) NOT NULL,
+        file_path VARCHAR(500) NOT NULL,
+        file_size INTEGER NOT NULL,
+        file_type VARCHAR(100),
+        mime_type VARCHAR(100),
+        task_id INTEGER,
+        uploaded_by INTEGER NOT NULL,
+        uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE SET NULL,
+        FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `;
+    
+    const createTaskFilesTable = `
+      CREATE TABLE IF NOT EXISTS task_files (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_id INTEGER NOT NULL,
+        file_id INTEGER NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+        FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE,
+        UNIQUE(task_id, file_id)
+      )
+    `;
+    
     // 按顺序创建表
     db.run(createUsersTable, (err) => {
       if (err) {
@@ -212,7 +243,25 @@ const createTables = () => {
                                     reject(err);
                                   } else {
                                     console.log('notifications表创建成功');
-                                    resolve();
+                                    
+                                    db.run(createFilesTable, (err) => {
+                                      if (err) {
+                                        console.error('创建files表失败:', err.message);
+                                        reject(err);
+                                      } else {
+                                        console.log('files表创建成功');
+                                        
+                                        db.run(createTaskFilesTable, (err) => {
+                                          if (err) {
+                                            console.error('创建task_files表失败:', err.message);
+                                            reject(err);
+                                          } else {
+                                            console.log('task_files表创建成功');
+                                            resolve();
+                                          }
+                                        });
+                                      }
+                                    });
                                   }
                                 });
                               }

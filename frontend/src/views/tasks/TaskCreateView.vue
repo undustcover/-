@@ -127,27 +127,7 @@
               </el-select>
             </el-form-item>
             
-            <el-form-item label="附件上传">
-              <el-upload
-                ref="uploadRef"
-                :file-list="fileList"
-                :auto-upload="false"
-                :on-change="handleFileChange"
-                :on-remove="handleFileRemove"
-                multiple
-                drag
-              >
-                <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
-                <div class="el-upload__text">
-                  将文件拖到此处，或<em>点击上传</em>
-                </div>
-                <template #tip>
-                  <div class="el-upload__tip">
-                    支持多文件上传，单个文件不超过10MB
-                  </div>
-                </template>
-              </el-upload>
-            </el-form-item>
+
             
             <el-form-item label="关联任务">
               <el-select
@@ -217,7 +197,7 @@ const uploadRef = ref()
 // 响应式数据
 const submitting = ref(false)
 const searchLoading = ref(false)
-const fileList = ref([])
+
 const users = ref([])
 const availableTags = ref(['前端', '后端', '测试', '设计', '文档', '优化', '重构'])
 const searchResults = ref([])
@@ -260,34 +240,7 @@ const disabledDate = (time: Date) => {
   return time.getTime() < Date.now() - 8.64e7 // 昨天之前的日期
 }
 
-// 处理文件变化
-const handleFileChange = (file: any, fileList: any[]) => {
-  // 检查文件大小
-  if (file.size > 10 * 1024 * 1024) {
-    ElMessage.error('文件大小不能超过10MB')
-    return false
-  }
-  
-  // 检查文件类型
-  const allowedTypes = [
-    'image/jpeg', 'image/png', 'image/gif',
-    'application/pdf', 'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/vnd.ms-excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'text/plain'
-  ]
-  
-  if (!allowedTypes.includes(file.raw.type)) {
-    ElMessage.error('不支持的文件类型')
-    return false
-  }
-}
 
-// 处理文件移除
-const handleFileRemove = (file: any, fileList: any[]) => {
-  // 文件移除逻辑
-}
 
 // 搜索任务
 const searchTasks = async (query: string) => {
@@ -331,16 +284,9 @@ const handleSubmit = async () => {
     
     submitting.value = true
     
-    // 处理文件上传
-    const attachments = []
-    if (fileList.value.length > 0) {
-      // TODO: 上传文件并获取文件ID
-    }
-    
     const taskData = {
       ...form,
-      category: mapCategoryToDatabase(form.category),
-      attachments
+      category: mapCategoryToDatabase(form.category)
     }
     
     await tasksStore.createTask(taskData)
@@ -388,7 +334,7 @@ const handleSubmitAndContinue = async () => {
       is_private: false,
       auto_assign: false
     })
-    fileList.value = []
+
   } catch (error) {
     if (error !== 'validation failed') {
       ElMessage.error('创建任务失败')
