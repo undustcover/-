@@ -22,6 +22,14 @@ export const reportsApi = {
     return request.get('/reports/tasks/trends', { params })
   },
 
+  // 获取工作类型统计报表
+  getWorkTypesStats: (params?: {
+    start_date?: string
+    end_date?: string
+  }) => {
+    return request.get('/reports/work-types/stats', { params })
+  },
+
   // 获取部门绩效报表
   getDepartmentsPerformance: (params?: {
     start_date?: string

@@ -198,7 +198,63 @@ router.get('/tasks/trends', requireManager, async (req, res) => {
   }
 });
 
-// 获取部门绩效报表
+// 获取工作类型统计报表
+router.get('/work-types/stats', requireManager, async (req, res) => {
+  try {
+    const {
+      start_date,
+      end_date
+    } = req.query;
+    
+    let whereConditions = ['t.status != "deleted"'];
+    let params = [];
+    
+    if (start_date) {
+      whereConditions.push('t.created_at >= ?');
+      params.push(start_date);
+    }
+    
+    if (end_date) {
+      whereConditions.push('t.created_at <= ?');
+      params.push(end_date);
+    }
+    
+    const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
+    
+    const sql = `
+      SELECT 
+        CASE 
+          WHEN t.category = '生产协调' THEN '生产运行'
+          WHEN t.category = '项目管理' THEN '项目管理'
+          WHEN t.category = '综合工作' THEN '综合工作'
+          ELSE '其他'
+        END as work_type,
+        COUNT(t.id) as total_tasks,
+        SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) as completed_tasks,
+        SUM(CASE WHEN t.status = 'in_progress' THEN 1 ELSE 0 END) as in_progress_tasks,
+        SUM(CASE WHEN t.status = 'pending' THEN 1 ELSE 0 END) as pending_tasks,
+        SUM(CASE WHEN t.due_date < datetime('now', 'localtime') AND t.status NOT IN ('completed', 'cancelled') THEN 1 ELSE 0 END) as overdue_tasks,
+        AVG(CASE WHEN t.status = 'completed' THEN julianday(t.updated_at) - julianday(t.created_at) ELSE NULL END) as avg_completion_days,
+        ROUND(SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) * 100.0 / COUNT(t.id), 2) as completion_rate
+      FROM tasks t
+      ${whereClause}
+      GROUP BY work_type
+      ORDER BY total_tasks DESC
+    `;
+    
+    const workTypeStats = await query(sql, params);
+    
+    res.json({
+      message: '获取工作类型统计报表成功',
+      data: workTypeStats
+    });
+  } catch (error) {
+    console.error('获取工作类型统计报表错误:', error);
+    res.status(500).json({ error: '获取工作类型统计报表失败' });
+  }
+});
+
+// 获取部门绩效报表（保留原有功能）
 router.get('/departments/performance', requireManager, async (req, res) => {
   try {
     const {

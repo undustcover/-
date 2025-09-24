@@ -148,12 +148,12 @@
           <div ref="priorityChartRef" class="chart-container"></div>
         </el-card>
         
-        <!-- 部门任务统计 -->
+        <!-- 工作类型统计 -->
         <el-card class="chart-card" v-loading="loading">
           <template #header>
-            <span>部门任务统计</span>
+            <span>工作类型统计</span>
           </template>
-          <div ref="departmentChartRef" class="chart-container"></div>
+          <div ref="workTypeChartRef" class="chart-container"></div>
         </el-card>
       </div>
       
@@ -338,14 +338,14 @@ const pageSize = ref(20)
 const trendChartRef = ref()
 const statusChartRef = ref()
 const priorityChartRef = ref()
-const departmentChartRef = ref()
+const workTypeChartRef = ref()
 const efficiencyChartRef = ref()
 
 // 图表实例
 let trendChart: echarts.ECharts | null = null
 let statusChart: echarts.ECharts | null = null
 let priorityChart: echarts.ECharts | null = null
-let departmentChart: echarts.ECharts | null = null
+let workTypeChart: echarts.ECharts | null = null
 let efficiencyChart: echarts.ECharts | null = null
 
 // 统计数据
@@ -370,9 +370,10 @@ const chartData = reactive({
   },
   statusData: [],
   priorityData: [],
-  departmentData: {
+  workTypeData: {
     categories: [],
-    values: []
+    values: [],
+    completionRates: []
   },
   efficiencyData: {
     categories: [],
@@ -441,8 +442,40 @@ const viewUserDetail = (user: any) => {
 }
 
 // 导出报表
-const exportReport = () => {
-  ElMessage.success('报表导出功能开发中...')
+const exportReport = async () => {
+  try {
+    ElMessage.info('正在导出报表，请稍候...')
+    
+    const params = {
+      start_date: dateRange.value?.[0],
+      end_date: dateRange.value?.[1]
+    }
+    
+    const response = await api.reports.exportTasks(params)
+    
+    // 创建下载链接
+    const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8' })
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    
+    // 生成文件名
+    const today = new Date().toISOString().split('T')[0]
+    const startDate = dateRange.value?.[0] || '全部'
+    const endDate = dateRange.value?.[1] || '全部'
+    const filename = `任务报表_${startDate}_${endDate}_${today}.csv`
+    
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    
+    ElMessage.success('报表导出成功！')
+  } catch (error) {
+    console.error('导出报表失败:', error)
+    ElMessage.error('导出报表失败，请重试')
+  }
 }
 
 // 获取任务统计数据
@@ -539,7 +572,28 @@ const fetchTasksTrend = async () => {
   }
 }
 
-// 获取部门绩效数据
+// 获取工作类型统计数据
+const fetchWorkTypesStats = async () => {
+  try {
+    const params = {
+      start_date: dateRange.value?.[0],
+      end_date: dateRange.value?.[1]
+    }
+    const response = await api.reports.getWorkTypesStats(params)
+    const data = response.data?.data || []
+
+    if (data && data.length > 0) {
+      chartData.workTypeData.categories = data.map((item: any) => item.work_type)
+      chartData.workTypeData.values = data.map((item: any) => item.total_tasks || 0)
+      chartData.workTypeData.completionRates = data.map((item: any) => item.completion_rate || 0)
+    }
+  } catch (error) {
+    console.error('获取工作类型统计数据失败:', error)
+    ElMessage.error('获取工作类型数据失败')
+  }
+}
+
+// 获取部门绩效数据（保留原有功能）
 const fetchDepartmentsPerformance = async () => {
   try {
     const params = {
@@ -632,7 +686,7 @@ const refreshData = async () => {
     await Promise.all([
       fetchTasksStats(),
       fetchTasksTrend(),
-      fetchDepartmentsPerformance(),
+      fetchWorkTypesStats(),
       fetchUsersPerformance()
     ])
     
@@ -641,7 +695,7 @@ const refreshData = async () => {
     updateTrendChart()
     updateStatusChart()
     updatePriorityChart()
-    updateDepartmentChart()
+    updateWorkTypeChart()
     updateEfficiencyChart()
     
     ElMessage.success('数据已刷新')
@@ -811,23 +865,30 @@ const updatePriorityChart = () => {
   priorityChart.setOption(option)
 }
 
-// 初始化部门统计图
-const initDepartmentChart = () => {
-  if (!departmentChartRef.value) return
+// 初始化工作类型统计图
+const initWorkTypeChart = () => {
+  if (!workTypeChartRef.value) return
   
-  departmentChart = echarts.init(departmentChartRef.value)
-  updateDepartmentChart()
+  workTypeChart = echarts.init(workTypeChartRef.value)
+  updateWorkTypeChart()
 }
 
-// 更新部门统计图
-const updateDepartmentChart = () => {
-  if (!departmentChart) return
+// 更新工作类型统计图
+const updateWorkTypeChart = () => {
+  if (!workTypeChart) return
   
   const option = {
     tooltip: {
       trigger: 'axis',
       axisPointer: {
         type: 'shadow'
+      },
+      formatter: function(params: any) {
+        const dataIndex = params[0].dataIndex
+        const workType = chartData.workTypeData.categories[dataIndex]
+        const taskCount = chartData.workTypeData.values[dataIndex]
+        const completionRate = chartData.workTypeData.completionRates[dataIndex]
+        return `${workType}<br/>任务数量: ${taskCount}<br/>完成率: ${completionRate}%`
       }
     },
     grid: {
@@ -842,21 +903,24 @@ const updateDepartmentChart = () => {
     },
     yAxis: {
       type: 'category',
-      data: chartData.departmentData.categories.length > 0 ? chartData.departmentData.categories : ['暂无数据']
+      data: chartData.workTypeData.categories.length > 0 ? chartData.workTypeData.categories : ['暂无数据']
     },
     series: [
       {
         name: '任务数量',
         type: 'bar',
-        data: chartData.departmentData.values,
+        data: chartData.workTypeData.values,
         itemStyle: {
-          color: '#409EFF'
+          color: function(params: any) {
+            const colors = ['#67C23A', '#E6A23C', '#409EFF', '#909399']
+            return colors[params.dataIndex % colors.length]
+          }
         }
       }
     ]
   }
   
-  departmentChart.setOption(option)
+  workTypeChart.setOption(option)
 }
 
 // 初始化效率统计图
@@ -933,7 +997,7 @@ const updateAllCharts = () => {
   updateTrendChart()
   statusChart?.setOption(statusChart.getOption())
   priorityChart?.setOption(priorityChart.getOption())
-  departmentChart?.setOption(departmentChart.getOption())
+  workTypeChart?.setOption(workTypeChart.getOption())
   updateEfficiencyChart()
 }
 
@@ -942,7 +1006,7 @@ const handleResize = () => {
   trendChart?.resize()
   statusChart?.resize()
   priorityChart?.resize()
-  departmentChart?.resize()
+  workTypeChart?.resize()
   efficiencyChart?.resize()
 }
 
@@ -953,7 +1017,7 @@ onMounted(async () => {
   initTrendChart()
   initStatusChart()
   initPriorityChart()
-  initDepartmentChart()
+  initWorkTypeChart()
   initEfficiencyChart()
   
   // 监听窗口大小变化
@@ -969,7 +1033,7 @@ const cleanup = () => {
   trendChart?.dispose()
   statusChart?.dispose()
   priorityChart?.dispose()
-  departmentChart?.dispose()
+  workTypeChart?.dispose()
   efficiencyChart?.dispose()
 }
 
