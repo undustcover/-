@@ -18,7 +18,7 @@ class User {
     
     const sql = `
       INSERT INTO users (username, email, password_hash, real_name, department, position, phone, role, status, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', datetime('now', 'localtime'))
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', NOW())
     `;
     
     const result = await query(sql, [username, email, hashedPassword, real_name, department, position, phone, finalRole]);
@@ -140,7 +140,7 @@ class User {
       throw new Error('没有有效的更新字段');
     }
 
-    updates.push('updated_at = datetime(\'now\')');
+    updates.push('updated_at = NOW()');
     params.push(id);
 
     const sql = `UPDATE users SET ${updates.join(', ')} WHERE id = ?`;
@@ -152,7 +152,7 @@ class User {
   // 更新密码
   static async updatePassword(id, newPassword) {
     const hashedPassword = await bcrypt.hash(newPassword, 12);
-    const sql = 'UPDATE users SET password_hash = ?, updated_at = datetime(\'now\') WHERE id = ?';
+    const sql = 'UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ?';
     const result = await query(sql, [hashedPassword, id]);
     
     return result.affectedRows > 0;
@@ -160,13 +160,13 @@ class User {
 
   // 更新最后登录时间
   static async updateLastLogin(id) {
-    const sql = 'UPDATE users SET last_login_at = datetime(\'now\') WHERE id = ?';
+    const sql = 'UPDATE users SET last_login_at = NOW() WHERE id = ?';
     await query(sql, [id]);
   }
 
   // 删除用户（软删除）
   static async delete(id) {
-    const sql = 'UPDATE users SET status = "deleted", updated_at = datetime(\'now\') WHERE id = ?';
+    const sql = 'UPDATE users SET status = "deleted", updated_at = NOW() WHERE id = ?';
     const result = await query(sql, [id]);
     
     return result.affectedRows > 0;

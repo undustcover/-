@@ -8,7 +8,7 @@ class TaskDependency {
     return new Promise((resolve, reject) => {
       const sql = `
         INSERT INTO task_dependencies (predecessor_id, successor_id, type, lag, created_at)
-        VALUES (?, ?, ?, ?, datetime('now'))
+        VALUES (?, ?, ?, ?, NOW())
       `;
       
       db.run(sql, [predecessor_id, successor_id, type, lag], function(err) {
@@ -152,7 +152,7 @@ class TaskDependency {
     return new Promise((resolve, reject) => {
       const sql = `
         UPDATE task_dependencies 
-        SET dependency_type = ?, lag_days = ?, updated_at = datetime('now')
+        SET dependency_type = ?, lag_days = ?, updated_at = NOW()
         WHERE id = ?
       `;
       

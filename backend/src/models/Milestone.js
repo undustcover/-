@@ -14,7 +14,7 @@ class Milestone {
 
     const sql = `
       INSERT INTO milestones (task_id, title, description, target_date, reminder_days, created_by, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
+      VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())
     `;
     
     const result = await query(sql, [task_id, title, description, target_date, reminder_days, created_by]);
@@ -25,11 +25,14 @@ class Milestone {
   static async findById(id) {
     const sql = `
       SELECT m.*, 
-             json_object(
-                'id', creator.id,
-                'username', creator.username,
-                'real_name', creator.real_name
-             ) as creator
+             CASE 
+               WHEN creator.id IS NOT NULL THEN json_object(
+                  'id', creator.id,
+                  'username', creator.username,
+                  'real_name', creator.real_name
+               )
+               ELSE NULL
+             END as creator
       FROM milestones m
       LEFT JOIN users creator ON m.created_by = creator.id
       WHERE m.id = ?
@@ -52,11 +55,14 @@ class Milestone {
   static async findByTaskId(taskId) {
     const sql = `
       SELECT m.*, 
-             json_object(
-                'id', creator.id,
-                'username', creator.username,
-                'real_name', creator.real_name
-             ) as creator
+             CASE 
+               WHEN creator.id IS NOT NULL THEN json_object(
+                  'id', creator.id,
+                  'username', creator.username,
+                  'real_name', creator.real_name
+               )
+               ELSE NULL
+             END as creator
       FROM milestones m
       LEFT JOIN users creator ON m.created_by = creator.id
       WHERE m.task_id = ?
@@ -87,7 +93,7 @@ class Milestone {
     const sql = `
       UPDATE milestones 
       SET title = ?, description = ?, target_date = ?, is_achieved = ?, 
-          achieved_date = ?, reminder_days = ?, updated_at = datetime('now', 'localtime')
+          achieved_date = ?, reminder_days = ?, updated_at = NOW()
       WHERE id = ?
     `;
     
@@ -99,7 +105,7 @@ class Milestone {
   static async markAsAchieved(id, achievedDate = null) {
     const sql = `
       UPDATE milestones 
-      SET is_achieved = 1, achieved_date = ?, updated_at = datetime('now', 'localtime')
+      SET is_achieved = 1, achieved_date = ?, updated_at = NOW()
       WHERE id = ?
     `;
     
@@ -119,15 +125,21 @@ class Milestone {
   static async getUpcoming(days = 7) {
     const sql = `
       SELECT m.*, 
-             json_object(
-                'id', creator.id,
-                'username', creator.username,
-                'real_name', creator.real_name
-             ) as creator,
-             json_object(
-                'id', t.id,
-                'title', t.title
-             ) as task
+             CASE 
+               WHEN creator.id IS NOT NULL THEN json_object(
+                  'id', creator.id,
+                  'username', creator.username,
+                  'real_name', creator.real_name
+               )
+               ELSE NULL
+             END as creator,
+             CASE 
+               WHEN t.id IS NOT NULL THEN json_object(
+                  'id', t.id,
+                  'title', t.title
+               )
+               ELSE NULL
+             END as task
       FROM milestones m
       LEFT JOIN users creator ON m.created_by = creator.id
       LEFT JOIN tasks t ON m.task_id = t.id
@@ -154,15 +166,21 @@ class Milestone {
   static async getOverdue() {
     const sql = `
       SELECT m.*, 
-             json_object(
-                'id', creator.id,
-                'username', creator.username,
-                'real_name', creator.real_name
-             ) as creator,
-             json_object(
-                'id', t.id,
-                'title', t.title
-             ) as task
+             CASE 
+               WHEN creator.id IS NOT NULL THEN json_object(
+                  'id', creator.id,
+                  'username', creator.username,
+                  'real_name', creator.real_name
+               )
+               ELSE NULL
+             END as creator,
+             CASE 
+               WHEN t.id IS NOT NULL THEN json_object(
+                  'id', t.id,
+                  'title', t.title
+               )
+               ELSE NULL
+             END as task
       FROM milestones m
       LEFT JOIN users creator ON m.created_by = creator.id
       LEFT JOIN tasks t ON m.task_id = t.id

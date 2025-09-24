@@ -59,7 +59,7 @@ const register = async (req, res) => {
     
     // 保存刷新令牌到数据库
     await query(
-      'INSERT INTO refresh_tokens (user_id, token, expires_at, created_at) VALUES (?, ?, datetime(\'now\', \'+7 days\'), datetime(\'now\'))',
+      'INSERT INTO refresh_tokens (user_id, token, expires_at, created_at) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY), NOW())',
       [userId, tokens.refreshToken]
     );
     
@@ -105,7 +105,7 @@ const login = async (req, res) => {
     
     // 保存刷新令牌到数据库
     await query(
-      'INSERT INTO refresh_tokens (user_id, token, expires_at, created_at) VALUES (?, ?, datetime(\'now\', \'+7 days\'), datetime(\'now\'))',
+      'INSERT INTO refresh_tokens (user_id, token, expires_at, created_at) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY), NOW())',
       [user.id, tokens.refreshToken]
     );
     

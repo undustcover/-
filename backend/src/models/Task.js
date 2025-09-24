@@ -22,7 +22,7 @@ class Task {
       const taskSql = `
         INSERT INTO tasks (title, description, priority, start_date, due_date, assigned_to, created_by, 
                           category, estimated_hours, status, progress, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now', 'localtime'))
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NOW())
       `;
       
       const taskResult = await query(taskSql, [
@@ -34,7 +34,7 @@ class Task {
       // 记录操作日志
        const logSql = `
          INSERT INTO task_logs (task_id, user_id, action, details, created_at)
-         VALUES (?, ?, 'create', ?, datetime('now', 'localtime'))
+         VALUES (?, ?, 'create', ?, NOW())
        `;
        await query(logSql, [taskId, created_by, `创建任务: ${title}`]);
 
@@ -46,18 +46,24 @@ class Task {
   static async findById(id) {
     const sql = `
       SELECT t.*, 
-             json_object(
-                'id', creator.id,
-                'username', creator.username,
-                'real_name', creator.real_name,
-                'avatar', creator.avatar
-              ) as creator,
-              json_object(
-                'id', assignee.id,
-                'username', assignee.username,
-                'real_name', assignee.real_name,
-                'avatar', assignee.avatar
-              ) as assignee
+             CASE 
+               WHEN creator.id IS NOT NULL THEN json_object(
+                  'id', creator.id,
+                  'username', creator.username,
+                  'real_name', creator.real_name,
+                  'avatar', creator.avatar
+                )
+               ELSE NULL
+             END as creator,
+             CASE 
+               WHEN assignee.id IS NOT NULL THEN json_object(
+                  'id', assignee.id,
+                  'username', assignee.username,
+                  'real_name', assignee.real_name,
+                  'avatar', assignee.avatar
+                )
+               ELSE NULL
+             END as assignee
       FROM tasks t
       LEFT JOIN users creator ON t.created_by = creator.id
       LEFT JOIN users assignee ON t.assigned_to = assignee.id
@@ -115,8 +121,8 @@ class Task {
       keyword
     } = options;
 
-    let whereConditions = ['t.status != "deleted"'];
-    let params = [];
+    let whereConditions = ['t.status != ?'];
+    let params = ['deleted'];
 
     if (status) {
       whereConditions.push('t.status = ?');
@@ -159,7 +165,7 @@ class Task {
       params.push(searchTerm, searchTerm);
     }
 
-    const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
     const offset = (page - 1) * limit;
 
     // 获取总数
@@ -171,27 +177,33 @@ class Task {
     const dataSql = `
       SELECT 
         t.*,
-        json_object(
-          'id', creator.id,
-          'username', creator.username,
-          'real_name', creator.real_name,
-          'avatar', creator.avatar
-        ) as creator,
-        json_object(
-          'id', assignee.id,
-          'username', assignee.username,
-          'real_name', assignee.real_name,
-          'avatar', assignee.avatar
-        ) as assignee
+        CASE 
+          WHEN creator.id IS NOT NULL THEN json_object(
+            'id', creator.id,
+            'username', creator.username,
+            'real_name', creator.real_name,
+            'avatar', creator.avatar
+          )
+          ELSE NULL
+        END as creator,
+        CASE 
+          WHEN assignee.id IS NOT NULL THEN json_object(
+            'id', assignee.id,
+            'username', assignee.username,
+            'real_name', assignee.real_name,
+            'avatar', assignee.avatar
+          )
+          ELSE NULL
+        END as assignee
       FROM tasks t
       LEFT JOIN users creator ON t.created_by = creator.id
       LEFT JOIN users assignee ON t.assigned_to = assignee.id
       ${whereClause}
       ORDER BY t.${sort} ${order}
-      LIMIT ? OFFSET ?
+      LIMIT ${limit} OFFSET ${offset}
     `;
     
-    const tasks = await query(dataSql, [...params, limit, offset]);
+    const tasks = await query(dataSql, params);
     
     // 处理标签和JSON对象
     tasks.forEach(task => {
@@ -252,7 +264,7 @@ class Task {
         throw new Error('没有有效的更新字段');
       }
 
-      updates.push('updated_at = datetime(\'now\', \'localtime\')');
+      updates.push('updated_at = NOW()');
       params.push(id);
 
       const sql = `UPDATE tasks SET ${updates.join(', ')} WHERE id = ?`;
@@ -274,14 +286,14 @@ class Task {
       if (hasStatusUpdate && newStatus !== oldStatus) {
         const logSql = `
         INSERT INTO task_logs (task_id, user_id, action, details, created_at)
-        VALUES (?, ?, 'status_change', ?, datetime('now', 'localtime'))
+        VALUES (?, ?, 'status_change', ?, NOW())
       `;
         const details = `任务「${taskTitle || id}」状态从 ${oldStatus} 变更为 ${newStatus}`;
         await query(logSql, [id, userId, details]);
       } else {
         const logSql = `
         INSERT INTO task_logs (task_id, user_id, action, details, created_at)
-        VALUES (?, ?, 'update', ?, datetime('now', 'localtime'))
+        VALUES (?, ?, 'update', ?, NOW())
       `;
         await query(logSql, [id, userId, `更新任务: ${logDetails.join(', ')}`]);
       }
@@ -303,14 +315,14 @@ class Task {
       
       // 更新任务负责人
       await query(
-        'UPDATE tasks SET assigned_to = ?, updated_at = datetime(\'now\') WHERE id = ?',
+        'UPDATE tasks SET assigned_to = ?, updated_at = NOW() WHERE id = ?',
         [newAssignee, id]
       );
 
       // 记录转移日志
       const logSql = `
         INSERT INTO task_logs (task_id, user_id, action, details, created_at)
-        VALUES (?, ?, 'transfer', ?, datetime('now', 'localtime'))
+        VALUES (?, ?, 'transfer', ?, NOW())
       `;
       const details = `任务转移: 从用户${oldAssignee}转移到用户${newAssignee}${reason ? ', 原因: ' + reason : ''}`;
       await query(logSql, [id, userId, details]);
@@ -325,7 +337,7 @@ class Task {
       // 插入延期申请
       const extensionSql = `
         INSERT INTO task_extensions (task_id, requested_by, original_due_date, new_due_date, reason, status, created_at)
-        SELECT ?, ?, due_date, ?, ?, 'pending', datetime('now', 'localtime')
+        SELECT ?, ?, due_date, ?, ?, 'pending', NOW()
         FROM tasks WHERE id = ?
       `;
       
@@ -334,7 +346,7 @@ class Task {
       // 记录操作日志
       const logSql = `
         INSERT INTO task_logs (task_id, user_id, action, details, created_at)
-        VALUES (?, ?, 'request_extension', ?, datetime('now', 'localtime'))
+        VALUES (?, ?, 'request_extension', ?, NOW())
       `;
       const details = `申请延期至: ${newDueDate}, 原因: ${reason}`;
       await query(logSql, [id, userId, details]);
@@ -347,7 +359,7 @@ class Task {
   static async delete(id, userId) {
     return await transaction(async (connection) => {
       const result = await query(
-        'UPDATE tasks SET status = "deleted", updated_at = datetime(\'now\') WHERE id = ?',
+        'UPDATE tasks SET status = "deleted", updated_at = NOW() WHERE id = ?',
         [id]
       );
       
@@ -358,7 +370,7 @@ class Task {
       // 记录操作日志
       const logSql = `
         INSERT INTO task_logs (task_id, user_id, action, details, created_at)
-        VALUES (?, ?, 'delete', '删除任务', datetime('now', 'localtime'))
+        VALUES (?, ?, 'delete', '删除任务', NOW())
       `;
       await query(logSql, [id, userId]);
 
@@ -385,7 +397,7 @@ class Task {
         SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
         SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled,
         SUM(CASE WHEN priority = 'urgent' THEN 1 ELSE 0 END) as urgent,
-        SUM(CASE WHEN due_date < datetime('now') AND status NOT IN ('completed', 'cancelled') THEN 1 ELSE 0 END) as overdue
+        SUM(CASE WHEN due_date < NOW() AND status NOT IN ('completed', 'cancelled') THEN 1 ELSE 0 END) as overdue
       FROM tasks 
       ${whereClause}
     `;
@@ -431,11 +443,14 @@ class Task {
     const sql = `
       SELECT 
         c.id, c.task_id, c.user_id, c.content, c.created_at,
-        json_object(
-          'id', u.id,
-          'real_name', u.real_name,
-          'avatar', u.avatar
-        ) as user
+        CASE 
+          WHEN u.id IS NOT NULL THEN json_object(
+            'id', u.id,
+            'real_name', u.real_name,
+            'avatar', u.avatar
+          )
+          ELSE NULL
+        END as user
       FROM task_comments c
       LEFT JOIN users u ON c.user_id = u.id
       WHERE c.task_id = ?
@@ -460,7 +475,7 @@ class Task {
     return await transaction(async (connection) => {
       const commentSql = `
         INSERT INTO task_comments (task_id, user_id, content, created_at)
-        VALUES (?, ?, ?, datetime('now', 'localtime'))
+        VALUES (?, ?, ?, NOW())
       `;
       const result = await query(commentSql, [taskId, userId, content]);
       const commentId = result.insertId || result.lastID;
@@ -468,7 +483,7 @@ class Task {
       // 记录日志
       const logSql = `
         INSERT INTO task_logs (task_id, user_id, action, details, created_at)
-        VALUES (?, ?, 'comment', ?, datetime('now', 'localtime'))
+        VALUES (?, ?, 'comment', ?, NOW())
       `;
       await query(logSql, [taskId, userId, `发表了评论: ${content.substring(0, 50)}...`]);
 
@@ -476,11 +491,14 @@ class Task {
       const newCommentResult = await query(
         `SELECT 
           c.id, c.task_id, c.user_id, c.content, c.created_at,
-          json_object(
-            'id', u.id,
-            'real_name', u.real_name,
-            'avatar', u.avatar
-          ) as user
+          CASE 
+            WHEN u.id IS NOT NULL THEN json_object(
+              'id', u.id,
+              'real_name', u.real_name,
+              'avatar', u.avatar
+            )
+            ELSE NULL
+          END as user
          FROM task_comments c 
          LEFT JOIN users u ON c.user_id = u.id 
          WHERE c.id = ?`,

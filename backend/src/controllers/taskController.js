@@ -81,8 +81,8 @@ const createTask = async (req, res) => {
 const getTasks = async (req, res) => {
   try {
     const {
-      page = 1,
-      limit = 10,
+      page: pageStr = '1',
+      limit: limitStr = '10',
       sort = 'created_at',
       order = 'desc',
       status,
@@ -94,10 +94,13 @@ const getTasks = async (req, res) => {
       due_date_end,
       keyword
     } = req.query;
+
+    const page = parseInt(pageStr, 10);
+    const limit = parseInt(limitStr, 10);
     
     const options = {
-      page: parseInt(page),
-      limit: parseInt(limit),
+      page: isNaN(page) || page < 1 ? 1 : page,
+      limit: isNaN(limit) || limit < 1 ? 10 : limit,
       sort,
       order,
       status,
