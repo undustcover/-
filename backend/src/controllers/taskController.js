@@ -14,6 +14,7 @@ const createTask = async (req, res) => {
       due_date,
       assigned_to,
       assignee_id,
+      parent_id,
       category,
       tags,
       estimated_hours,
@@ -42,6 +43,7 @@ const createTask = async (req, res) => {
       due_date,
       assigned_to: finalAssignedTo,
       created_by,
+      parent_id,
       category,
       tags,
       estimated_hours,
@@ -175,6 +177,7 @@ const updateTask = async (req, res) => {
       updateData.assigned_to = updateData.assignee_id;
       delete updateData.assignee_id;
     }
+    // 直接允许 parent_id 透传更新
     
     // 获取任务信息进行权限检查
     const task = await Task.findById(id);

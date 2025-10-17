@@ -13,20 +13,30 @@ class Task {
       created_by,
       category,
       tags = [],
+      parent_id,
       estimated_hours,
       status = 'pending' // 获取 status，默认值为 'pending'
     } = taskData;
 
     return await transaction(async (connection) => {
+      // 统一处理标签为JSON字符串，兼容SQLite(TEXT)与MySQL(JSON)
+      const tagsArray = Array.isArray(tags)
+        ? tags
+        : (typeof tags === 'string'
+            ? tags.split(',').map(s => s.trim()).filter(Boolean)
+            : []);
+      const tagsJson = JSON.stringify(tagsArray);
+
       // 插入任务
       const taskSql = `
         INSERT INTO tasks (title, description, priority, start_date, due_date, assigned_to, created_by, 
-                          category, estimated_hours, status, progress, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now', 'localtime'))
+                          category, estimated_hours, status, progress, created_at, parent_id, tags)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now', 'localtime'), ?, ?)
       `;
       
       const taskResult = await query(taskSql, [
-        title, description, priority, start_date, due_date, assigned_to, created_by, category, estimated_hours, status // 使用 status
+        title, description, priority, start_date, due_date, assigned_to, created_by, category, estimated_hours, status, // 使用 status
+        parent_id || null, tagsJson
       ]);
       
       const taskId = taskResult.insertId || taskResult.lastID;
@@ -68,8 +78,17 @@ class Task {
     if (tasks.length === 0) return null;
     
     const task = tasks[0];
-    // 暂时设置空标签数组，后续可以从tags字段解析
-    task.tags = task.tags ? task.tags.split(',') : [];
+    // 解析标签：优先解析JSON，其次按逗号分隔
+    if (task.tags) {
+      try {
+        const parsed = JSON.parse(task.tags);
+        task.tags = Array.isArray(parsed) ? parsed : [];
+      } catch (e) {
+        task.tags = typeof task.tags === 'string' ? task.tags.split(',').filter(Boolean) : [];
+      }
+    } else {
+      task.tags = [];
+    }
 
     if (task.creator) {
       try { task.creator = JSON.parse(task.creator); } catch (e) { /* a task must have a creator */ }
@@ -195,7 +214,16 @@ class Task {
     
     // 处理标签和JSON对象
     tasks.forEach(task => {
-      task.tags = task.tags ? task.tags.split(',') : [];
+      if (task.tags) {
+        try {
+          const parsed = JSON.parse(task.tags);
+          task.tags = Array.isArray(parsed) ? parsed : [];
+        } catch (e) {
+          task.tags = typeof task.tags === 'string' ? task.tags.split(',').filter(Boolean) : [];
+        }
+      } else {
+        task.tags = [];
+      }
       if (task.creator) {
         try { task.creator = JSON.parse(task.creator); } catch (e) { /* a task must have a creator */ }
       }
@@ -224,7 +252,7 @@ class Task {
   static async update(id, updateData, userId) {
     const allowedFields = [
       'title', 'description', 'priority', 'status', 'start_date', 'due_date', 
-      'assigned_to', 'category', 'estimated_hours', 'actual_hours', 'progress'
+      'assigned_to', 'category', 'estimated_hours', 'actual_hours', 'progress', 'parent_id'
     ];
     
     return await transaction(async (connection) => {
@@ -247,6 +275,19 @@ class Task {
           logDetails.push(`${key}: ${Array.isArray(updateData[key]) ? updateData[key].join(', ') : updateData[key]}`);
         }
       });
+
+      // 特殊处理标签字段（数组）
+      if (updateData.tags !== undefined) {
+        const tagsArray = Array.isArray(updateData.tags)
+          ? updateData.tags
+          : (typeof updateData.tags === 'string'
+              ? updateData.tags.split(',').map(s => s.trim()).filter(Boolean)
+              : []);
+        const tagsJson = JSON.stringify(tagsArray);
+        updates.push('tags = ?');
+        params.push(tagsJson);
+        logDetails.push(`tags: ${tagsArray.join(', ')}`);
+      }
 
       if (updates.length === 0) {
         throw new Error('没有有效的更新字段');

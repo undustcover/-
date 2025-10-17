@@ -99,6 +99,7 @@ const taskSchemas = {
     due_date: Joi.date().iso().optional(),
     assigned_to: Joi.number().integer().optional(),
     assignee_id: Joi.number().integer().optional(),
+    parent_id: Joi.number().integer().allow(null).optional(),
     category: Joi.string().valid('生产协调', '项目管理', '综合工作').optional(),
     tags: Joi.array().items(Joi.string().max(30)).optional(),
     estimated_hours: Joi.number().min(0).optional()
@@ -112,6 +113,7 @@ const taskSchemas = {
     due_date: Joi.date().iso().optional(),
     assigned_to: Joi.number().integer().optional(),
     assignee_id: Joi.number().integer().optional(),
+    parent_id: Joi.number().integer().allow(null).optional(),
     category: Joi.string().valid('生产协调', '项目管理', '综合工作').optional(),
     tags: Joi.array().items(Joi.string().max(30)).optional(),
     estimated_hours: Joi.number().min(0).optional(),

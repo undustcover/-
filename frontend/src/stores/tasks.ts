@@ -44,9 +44,20 @@ export const useTasksStore = defineStore('tasks', () => {
 
   // 将后端任务结构映射为前端Task结构
   const mapBackendTask = (t: any): Task => {
+    let tags: string[] = []
+    if (Array.isArray(t?.tags)) {
+      tags = t.tags
+    } else if (typeof t?.tags === 'string') {
+      try {
+        const parsed = JSON.parse(t.tags)
+        tags = Array.isArray(parsed) ? parsed : (t.tags.split(',').filter(Boolean))
+      } catch {
+        tags = t.tags.split(',').filter(Boolean)
+      }
+    }
     return {
       ...t,
-      tags: Array.isArray(t?.tags) ? t.tags : (typeof t?.tags === 'string' ? t.tags.split(',').filter(Boolean) : [])
+      tags
     }
   }
 

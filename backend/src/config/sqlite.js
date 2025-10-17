@@ -328,6 +328,36 @@ const initTables = async () => {
   try {
     await createTables();
     await checkAndAddUserColumns();
+    // 检查并添加 tasks 表缺失列（与模型/控制器保持一致）
+    await new Promise((resolve) => {
+      db.all("PRAGMA table_info('tasks')", (err, columns) => {
+        if (err) {
+          console.error('检查tasks表结构失败:', err.message);
+          resolve();
+          return;
+        }
+        const colNames = columns.map(c => c.name);
+        const addColumnIfMissing = (name, sql, cb) => {
+          if (!colNames.includes(name)) {
+            db.run(sql, (e) => {
+              if (e) console.error(`添加列${name}失败:`, e.message);
+              else console.log(`列${name}添加成功`);
+              cb();
+            });
+          } else {
+            cb();
+          }
+        };
+        // 仅添加缺失但被业务使用的关键列
+        addColumnIfMissing('parent_id', "ALTER TABLE tasks ADD COLUMN parent_id INTEGER", () => {
+          addColumnIfMissing('tags', "ALTER TABLE tasks ADD COLUMN tags TEXT", () => {
+            addColumnIfMissing('category', "ALTER TABLE tasks ADD COLUMN category TEXT", () => {
+              resolve();
+            });
+          });
+        });
+      });
+    });
     console.log('所有数据库表初始化完成');
     // 不要关闭数据库连接，保持服务器运行
   } catch (error) {

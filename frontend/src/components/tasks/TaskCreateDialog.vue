@@ -45,6 +45,28 @@
             </el-select>
           </el-form-item>
         </el-col>
+
+        <el-col :span="12">
+          <el-form-item label="上级任务" prop="parent_id">
+            <el-select
+              v-model="formData.parent_id"
+              placeholder="搜索并选择上级任务"
+              clearable
+              filterable
+              remote
+              :remote-method="searchParentTasks"
+              :loading="parentTaskLoading"
+              style="width: 100%"
+            >
+              <el-option
+                v-for="pt in parentTaskList"
+                :key="pt.id"
+                :label="pt.title"
+                :value="String(pt.id)"
+              />
+            </el-select>
+          </el-form-item>
+        </el-col>
         
         <el-col :span="12" v-if="authStore.isManager">
           <el-form-item label="负责人" prop="assigned_to">
@@ -233,6 +255,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { usersApi } from '@/api/users'
 import { useAuthStore } from '@/stores/auth'
 import { useTasksStore } from '@/stores/tasks'
+import { taskApi } from '@/api/tasks'
 import type { FormInstance, FormRules } from 'element-plus'
 import type { Task, User } from '@/types/task'
 
@@ -267,10 +290,12 @@ const inputRef = ref()
 const submitLoading = ref(false)
 const userLoading = ref(false)
 const taskLoading = ref(false)
+const parentTaskLoading = ref(false)
 const inputVisible = ref(false)
 const inputValue = ref('')
 const userList = ref<User[]>([])
 const taskList = ref<Task[]>([])
+const parentTaskList = ref<Task[]>([])
 
 // 表单数据
 const formData = ref({
@@ -286,6 +311,7 @@ const formData = ref({
   description: '',
   tags: [] as string[],
   related_tasks: [] as string[],
+  parent_id: '' as string | '',
   notifications: ['system'] as string[]
 })
 
@@ -303,6 +329,28 @@ const formRules: FormRules = {
   ],
   status: [
     { required: true, message: '请选择状态', trigger: 'change' }
+  ],
+  parent_id: [
+    {
+      validator: (rule, value, callback) => {
+        // 允许为空（不选择上级）
+        if (value === '' || value === null || typeof value === 'undefined') {
+          return callback()
+        }
+        const v = String(value)
+        // 不允许选择自身为上级
+        if (props.isEdit && props.task && v === String(props.task.id)) {
+          return callback(new Error('不能选择自身作为上级任务'))
+        }
+        // 校验是否存在于候选列表（避免类型不一致导致误判）
+        const exists = parentTaskList.value.some(t => String(t.id) === v)
+        if (!exists) {
+          return callback(new Error('请选择有效的上级任务'))
+        }
+        return callback()
+      },
+      trigger: 'change'
+    }
   ],
   due_date: [
     {
@@ -411,6 +459,27 @@ const searchTasks = async (query: string) => {
   }
 }
 
+// 搜索上级任务（实时远程）
+const searchParentTasks = async (query: string) => {
+  if (!query) {
+    parentTaskList.value = []
+    return
+  }
+
+  parentTaskLoading.value = true
+  try {
+    const res = await taskApi.getTasks({ keyword: query, limit: 20 })
+    const list = (res.data as any)?.tasks ?? (res.data as any)?.data ?? []
+    const currentId = props.task?.id
+    parentTaskList.value = list.filter((t: any) => String(t.id) !== String(currentId))
+  } catch (error) {
+    console.error('搜索上级任务失败:', error)
+    ElMessage.error('搜索上级任务失败')
+  } finally {
+    parentTaskLoading.value = false
+  }
+}
+
 // 显示标签输入框
 const showInput = () => {
   inputVisible.value = true
@@ -454,6 +523,7 @@ const resetForm = () => {
     description: '',
     tags: [],
     related_tasks: [],
+    parent_id: '',
     notifications: ['system']
   }
   formRef.value?.clearValidate()
@@ -474,6 +544,7 @@ const fillFormData = (task: Task) => {
     description: task.description || '',
     tags: task.tags || [],
     related_tasks: (task as any).related_tasks || [],
+    parent_id: (task as any).parent_id ? String((task as any).parent_id) : '',
     notifications: (task as any).notifications || ['system']
   }
 }
@@ -510,7 +581,8 @@ const handleSubmit = async () => {
         due_date: formData.value.due_date || undefined,
         estimated_hours: formData.value.estimated_hours,
         progress: formData.value.progress,
-        tags: formData.value.tags
+        tags: formData.value.tags,
+        parent_id: formData.value.parent_id || undefined
       }
       
       await tasksStore.updateTask(props.task.id, updateData)
@@ -522,12 +594,13 @@ const handleSubmit = async () => {
         description: formData.value.description,
         category: mapCategoryToDatabase(formData.value.category),
         priority: formData.value.priority,
-        status: formData.value.status, // 添加 status 字段
+        status: formData.value.status,
         assigned_to: formData.value.assigned_to || undefined,
         start_date: formData.value.start_date || undefined,
         due_date: formData.value.due_date || undefined,
         estimated_hours: formData.value.estimated_hours,
-        tags: formData.value.tags
+        tags: formData.value.tags,
+        parent_id: formData.value.parent_id || undefined
       }
       
       const response = await tasksStore.createTask(createData)

@@ -85,26 +85,45 @@
     <el-card class="task-table-card">
       <el-table
         v-loading="loading"
-        :data="tasks"
+        :data="tasksTree"
+        row-key="id"
+        :tree-props="{ children: 'children' }"
+        default-expand-all
         stripe
         @row-click="handleRowClick"
       >
-        <el-table-column prop="title" label="任务标题" min-width="200">
+        <el-table-column prop="title" label="任务标题" min-width="260">
           <template #default="{ row }">
             <div class="task-title-cell">
-              <span class="task-title">{{ row.title }}</span>
+              <span
+                class="task-title"
+                :style="{ marginLeft: `${(row._depth || 0) * 12}px` }"
+                >{{ row._pathDisplay || `[${row.title}]` }}</span>
               <div class="task-tags">
-                <el-tag
-                  :type="getTypeColor(row.category)"
-                  size="small"
-                >
+                <el-tag :type="getTypeColor(row.category)" size="small">
                   {{ getTypeText(row.category) }}
                 </el-tag>
+                <el-tag
+                  v-for="tg in (row.tags || [])"
+                  :key="tg"
+                  size="small"
+                  class="tag-chip"
+                >{{ tg }}</el-tag>
               </div>
             </div>
           </template>
         </el-table-column>
-        
+
+        <!-- 内容列：完整显示任务描述，支持换行与自适应行高 -->
+        <el-table-column prop="description" label="内容" min-width="300">
+          <template #default="{ row }">
+            <div class="content-cell">
+              <span v-if="row.description && row.description.trim()">{{ row.description }}</span>
+              <span v-else class="text-placeholder">无</span>
+            </div>
+          </template>
+        </el-table-column>
+
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
             <el-tag :type="getStatusType(row.status)" size="small">
@@ -113,13 +132,7 @@
           </template>
         </el-table-column>
         
-        <el-table-column prop="priority" label="优先级" width="100">
-          <template #default="{ row }">
-            <el-tag :type="getPriorityType(row.priority)" size="small">
-              {{ getPriorityText(row.priority) }}
-            </el-tag>
-          </template>
-        </el-table-column>
+        <!-- 移除优先级列以腾出空间显示完整内容 -->
         
         <el-table-column prop="assignee" label="负责人" width="120">
           <template #default="{ row }">
@@ -260,6 +273,39 @@ const tasks = computed(() => {
  
    return all
  })
+
+// 构建树状数据（根据 parent_id 组织 children）
+const tasksTree = computed(() => {
+  const list = tasks.value.map(t => ({ ...t })) as any[]
+  const map: Record<string, any> = {}
+  list.forEach(item => { map[String(item.id)] = item })
+  const roots: any[] = []
+  list.forEach(item => {
+    const pid = (item as any).parent_id
+    if (pid && map[String(pid)]) {
+      const parent = map[String(pid)]
+      parent.children = parent.children || []
+      parent.children.push(item)
+    } else {
+      roots.push(item)
+    }
+  })
+  // 注入层级深度与路径显示
+  const seen = new Set<string>()
+  const dfs = (node: any, pathTitles: string[]) => {
+    const id = String(node.id)
+    if (seen.has(id)) return
+    seen.add(id)
+    const titles = [...pathTitles, String(node.title || '#'+id)]
+    node._depth = pathTitles.length
+    node._pathDisplay = titles.map(t => `[${t}]`).join('-')
+    if (Array.isArray(node.children)) {
+      node.children.forEach((child: any) => dfs(child, titles))
+    }
+  }
+  roots.forEach(r => dfs(r, []))
+  return roots
+})
 
 // 获取状态类型
 const getStatusType = (status: string) => {
@@ -567,6 +613,11 @@ const canDelete = (t: Task) => {
 .task-tags {
   display: flex;
   gap: 4px;
+  flex-wrap: wrap;
+}
+
+.tag-chip {
+  margin-left: 4px;
 }
 
 .assignee-cell {
@@ -596,6 +647,12 @@ const canDelete = (t: Task) => {
   display: flex;
   justify-content: center;
   margin-top: 20px;
+}
+
+.content-cell {
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.6;
 }
 
 :deep(.el-table__row) {

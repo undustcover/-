@@ -76,6 +76,16 @@
                   {{ getTypeText(task.category) }}
                 </el-tag>
               </div>
+
+              <div class="info-item">
+                <label>上级任务</label>
+                <div v-if="task.parent_id">
+                  <router-link :to="'/tasks/' + task.parent_id" class="parent-link">
+                    {{ parentTask?.title || ('#' + task.parent_id) }}
+                  </router-link>
+                </div>
+                <span v-else class="text-placeholder">无</span>
+              </div>
               
               <div class="info-item">
                 <label>负责人</label>
@@ -113,6 +123,14 @@
                 <span v-if="task.due_date" :class="getDueDateClass(task.due_date)">
                   {{ formatDateTime(task.due_date) }}
                 </span>
+                <span v-else class="text-placeholder">无</span>
+              </div>
+
+              <div class="info-item">
+                <label>标签</label>
+                <div v-if="task.tags && task.tags.length" class="tags-group">
+                  <el-tag v-for="tg in task.tags" :key="tg" class="tag-chip">{{ tg }}</el-tag>
+                </div>
                 <span v-else class="text-placeholder">无</span>
               </div>
             </div>
@@ -374,6 +392,7 @@ const uploadData = computed(() => ({
 
 // 计算属性
 const task = computed(() => tasksStore.currentTask)
+const parentTask = ref<Task | null>(null)
 
 // 获取状态类型
 const getStatusType = (status: string) => {
@@ -670,6 +689,18 @@ const fetchTaskDetail = async () => {
   loading.value = true
   try {
     await tasksStore.fetchTask(taskId)
+    // 若存在上级任务，获取其基本信息
+    const pid = (tasksStore.currentTask as any)?.parent_id
+    if (pid) {
+      try {
+        const res = await taskApi.getTask(String(pid))
+        parentTask.value = (res.data as any)?.task ?? res.data ?? null
+      } catch (e) {
+        parentTask.value = null
+      }
+    } else {
+      parentTask.value = null
+    }
     
     // 获取评论和历史记录
     fetchComments(taskId)
@@ -979,6 +1010,20 @@ const canDelete = computed(() => {
 
 .text-warning {
   color: var(--el-color-warning);
+}
+
+.tags-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tag-chip {
+  margin-right: 4px;
+}
+
+.parent-link {
+  color: var(--el-color-primary);
 }
 
 @media (max-width: 768px) {
