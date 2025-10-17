@@ -11,7 +11,9 @@ if (dbType === 'sqlite') {
   db = sqliteDb;
   
   // 初始化表结构（不阻塞启动）
-  initTables().catch(err => {
+  initTables().then(() => {
+    console.log('数据库表初始化完成');
+  }).catch(err => {
     console.error('SQLite表初始化失败:', err);
   });
 } else {

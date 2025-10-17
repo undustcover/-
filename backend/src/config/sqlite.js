@@ -178,12 +178,20 @@ const createTables = () => {
     const createTaskFilesTable = `
       CREATE TABLE IF NOT EXISTS task_files (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        task_id INTEGER NOT NULL,
-        file_id INTEGER NOT NULL,
+        task_id INTEGER,
+        file_id INTEGER,
+        original_name VARCHAR(255) NOT NULL,
+        filename VARCHAR(255) NOT NULL,
+        file_path VARCHAR(500) NOT NULL,
+        file_size INTEGER NOT NULL DEFAULT 0,
+        mime_type VARCHAR(100),
+        uploaded_by INTEGER NOT NULL,
+        is_folder INTEGER DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
         FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE,
-        UNIQUE(task_id, file_id)
+        FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE CASCADE
       )
     `;
     
@@ -321,6 +329,7 @@ const initTables = async () => {
     await createTables();
     await checkAndAddUserColumns();
     console.log('所有数据库表初始化完成');
+    // 不要关闭数据库连接，保持服务器运行
   } catch (error) {
     console.error('数据库初始化失败:', error);
     throw error;

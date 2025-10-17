@@ -59,6 +59,60 @@ const upload = multer({
   }
 });
 
+// 创建文件夹
+router.post('/folder', async (req, res) => {
+  try {
+    const { name, path: folderPath } = req.body;
+    const userId = req.user.id;
+    
+    if (!name) {
+      return res.status(400).json({ error: '文件夹名称不能为空' });
+    }
+    
+    // 检查文件夹名称是否已存在
+    const existingFolder = await query(
+      'SELECT id FROM task_files WHERE original_name = ? AND is_folder = 1 AND (file_path = ? OR file_path IS NULL)',
+      [name, folderPath || '']
+    );
+    
+    if (existingFolder.length > 0) {
+      return res.status(400).json({ error: '文件夹名称已存在' });
+    }
+    
+    // 创建文件夹记录
+    const sql = `
+      INSERT INTO task_files (
+        original_name, 
+        filename, 
+        file_path, 
+        file_size, 
+        mime_type, 
+        uploaded_by, 
+        is_folder,
+        created_at
+      ) VALUES (?, ?, ?, 0, 'folder', ?, 1, datetime('now', 'localtime'))
+    `;
+    
+    const folderFullPath = folderPath ? `${folderPath}/${name}` : name;
+    // file_path应该是父路径，不包含当前文件夹名
+    const result = await query(sql, [name, name, folderPath || '', userId]);
+    
+    res.status(201).json({
+      message: '文件夹创建成功',
+      folder: {
+        id: result.lastID,
+        name: name,
+        path: folderPath || '',
+        type: 'folder',
+        created_at: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    console.error('创建文件夹错误:', error);
+    res.status(500).json({ error: '创建文件夹失败' });
+  }
+});
+
 // 上传文件
 router.post('/upload', 
   upload.single('file'),
@@ -68,7 +122,7 @@ router.post('/upload',
         return res.status(400).json({ error: '请选择要上传的文件' });
       }
       
-      const { task_id, description } = req.body;
+      const { task_id, description, path } = req.body;
       const userId = req.user.id;
       
       // 保存文件信息到数据库
@@ -91,6 +145,14 @@ router.post('/upload',
       
       console.log('最终文件名:', originalName);
       
+      // 逻辑文件夹路径（用于目录隔离），不存储磁盘绝对路径
+      // 根目录使用空字符串''，子目录为'folder/subfolder'形式
+      const folderPath = (typeof path === 'string') ? path.trim() : '';
+      
+      // 仅存储父目录路径到数据库，文件名单独存储在 filename 字段
+      // 兼容旧数据：后续列表查询对旧数据进行前端过滤
+      const storedFilePath = folderPath;
+      
       const sql = `
         INSERT INTO task_files (task_id, uploaded_by, original_name, filename, file_path, file_size, mime_type, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
@@ -101,7 +163,7 @@ router.post('/upload',
         userId,
         originalName, // 使用修复后的文件名
         req.file.filename,
-        req.file.path,
+        storedFilePath, // 仅存储父目录路径
         req.file.size,
         req.file.mimetype
       ];
@@ -119,6 +181,7 @@ router.post('/upload',
         file_size: req.file.size,
         mime_type: req.file.mimetype,
         upload_url: `/api/files/download/${result.insertId}`,
+        path: storedFilePath,
         created_at: new Date()
       };
       
@@ -136,62 +199,93 @@ router.post('/upload',
 // 获取文件列表
 router.get('/', async (req, res) => {
   try {
-    const {
-      page = 1,
-      limit = 10,
-      task_id,
-      uploaded_by,
-      keyword
-    } = req.query;
+    console.log('获取文件列表请求:', req.query);
+    const { task_id, page = 1, limit = 20, currentPath = '' } = req.query;
+    const offset = (page - 1) * limit;
     
-    let whereConditions = [];
-    let params = [];
+    let sql = `
+      SELECT 
+        id,
+        original_name as name,
+        filename,
+        file_path as path,
+        file_size as size,
+        mime_type,
+        task_id,
+        uploaded_by,
+        is_folder,
+        created_at,
+        updated_at
+      FROM task_files 
+      WHERE 1=1
+    `;
+    
+    const params = [];
     
     if (task_id) {
-      whereConditions.push('tf.task_id = ?');
+      sql += ' AND task_id = ?';
       params.push(task_id);
     }
     
-    if (uploaded_by) {
-      whereConditions.push('tf.uploaded_by = ?');
-      params.push(uploaded_by);
+    // 添加路径过滤
+    if (currentPath && currentPath.trim() !== '') {
+      // 当前目录：仅显示直接子文件夹和文件
+      // 子文件夹：is_folder = 1 且 file_path = currentPath
+      // 子文件：is_folder = 0 且 file_path = currentPath
+      sql += ' AND ((is_folder = 1 AND file_path = ?) OR (is_folder = 0 AND file_path = ?))';
+      params.push(currentPath, currentPath);
+    } else {
+      // 根目录：只显示没有路径或路径为空的文件和文件夹
+      sql += ' AND (file_path IS NULL OR file_path = "")';
     }
     
-    if (keyword) {
-      whereConditions.push('tf.original_name LIKE ?');
-      const searchTerm = `%${keyword}%`;
-      params.push(searchTerm);
-    }
+    sql += ' ORDER BY is_folder DESC, created_at DESC LIMIT ? OFFSET ?';
+    params.push(parseInt(limit), parseInt(offset));
     
-    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
-    const offset = (page - 1) * limit;
+    console.log('执行SQL:', sql);
+    console.log('参数:', params);
+    
+    const files = await query(sql, params);
+    console.log('查询结果:', files);
     
     // 获取总数
-    const countSql = `SELECT COUNT(*) as total FROM task_files tf ${whereClause}`;
-    const countResult = await query(countSql, params);
+    let countSql = 'SELECT COUNT(*) as total FROM task_files WHERE 1=1';
+    const countParams = [];
+    
+    if (task_id) {
+      countSql += ' AND task_id = ?';
+      countParams.push(task_id);
+    }
+    
+    // 添加路径过滤到计数查询
+    if (currentPath && currentPath.trim() !== '') {
+      // 当前目录：仅统计直接子文件夹和文件
+      countSql += ' AND ((is_folder = 1 AND file_path = ?) OR (is_folder = 0 AND file_path = ?))';
+      countParams.push(currentPath, currentPath);
+    } else {
+      // 根目录：只显示没有路径或路径为空的文件和文件夹
+      countSql += ' AND (file_path IS NULL OR file_path = "")';
+    }
+    
+    const countResult = await query(countSql, countParams);
     const total = countResult[0].total;
     
-    // 获取数据
-    const dataSql = `
-      SELECT tf.*, u.real_name as uploader_name, t.title as task_title
-      FROM task_files tf
-      LEFT JOIN users u ON tf.uploaded_by = u.id
-      LEFT JOIN tasks t ON tf.task_id = t.id
-      ${whereClause}
-      ORDER BY tf.created_at DESC
-      LIMIT ? OFFSET ?
-    `;
-    
-    const files = await query(dataSql, [...params, parseInt(limit), offset]);
-    
-    // 添加下载URL
-    files.forEach(file => {
-      file.download_url = `/api/files/download/${file.id}`;
-    });
+    // 格式化文件数据
+    const formattedFiles = files.map(file => ({
+      id: file.id,
+      name: file.name,
+      type: file.is_folder ? 'folder' : 'file',
+      size: file.size,
+      mime_type: file.mime_type,
+      path: file.path,
+      task_id: file.task_id,
+      uploaded_by: file.uploaded_by,
+      created_at: file.created_at,
+      updated_at: file.updated_at
+    }));
     
     res.json({
-      message: '获取文件列表成功',
-      files,
+      files: formattedFiles,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -201,7 +295,8 @@ router.get('/', async (req, res) => {
     });
   } catch (error) {
     console.error('获取文件列表错误:', error);
-    res.status(500).json({ error: '获取文件列表失败' });
+    console.error('错误堆栈:', error.stack);
+    res.status(500).json({ error: '获取文件列表失败', details: error.message });
   }
 });
 
@@ -220,8 +315,11 @@ router.get('/download/:id', async (req, res) => {
     
     const file = files[0];
     
+    // 统一使用uploads目录 + filename定位磁盘文件
+    const diskPath = path.resolve(__dirname, '../../uploads', file.filename);
+    
     // 检查文件是否存在于磁盘
-    if (!fs.existsSync(file.file_path)) {
+    if (!fs.existsSync(diskPath)) {
       return res.status(404).json({ error: '文件已被删除' });
     }
     
@@ -239,7 +337,7 @@ router.get('/download/:id', async (req, res) => {
     res.setHeader('Content-Type', file.mime_type);
     
     // 发送文件
-    res.sendFile(path.resolve(file.file_path));
+    res.sendFile(diskPath);
   } catch (error) {
     console.error('文件下载错误:', error);
     res.status(500).json({ error: '文件下载失败' });
@@ -274,9 +372,10 @@ router.delete('/:id', async (req, res) => {
     // 从数据库删除记录
     await query('DELETE FROM task_files WHERE id = ?', [id]);
     
-    // 删除磁盘文件
-    if (fs.existsSync(file.file_path)) {
-      fs.unlinkSync(file.file_path);
+    // 删除磁盘文件（统一从uploads目录定位）
+    const diskPath = path.resolve(__dirname, '../../uploads', file.filename);
+    if (fs.existsSync(diskPath)) {
+      fs.unlinkSync(diskPath);
     }
     
     res.json({ message: '文件删除成功' });

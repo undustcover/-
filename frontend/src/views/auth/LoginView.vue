@@ -4,7 +4,7 @@
       <div class="login-header">
         <div class="logo">
           <el-icon class="logo-icon"><Management /></el-icon>
-          <h1 class="title">部门工作任务管理系统</h1>
+          <h1 class="title">项目运营管理部工作任务管理协同</h1>
         </div>
         <p class="subtitle">请登录您的账户</p>
       </div>
@@ -62,12 +62,7 @@
           </el-button>
         </el-form-item>
         
-        <div class="register-link">
-          <span>还没有账户？</span>
-          <el-link type="primary" @click="$router.push('/register')">
-            立即注册
-          </el-link>
-        </div>
+
       </el-form>
     </div>
     
@@ -312,16 +307,7 @@ const handleForgotPassword = async () => {
   font-weight: 500;
 }
 
-.register-link {
-  text-align: center;
-  margin-top: 24px;
-  color: #909399;
-  font-size: 14px;
-}
 
-.register-link span {
-  margin-right: 8px;
-}
 
 /* 响应式设计 */
 @media (max-width: 480px) {

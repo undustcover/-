@@ -1,22 +1,37 @@
 const app = require('./app');
 const db = require('./config/database');
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 
 // 启动服务器
-const server = app.listen(PORT, async () => {
+const server = app.listen(PORT, 'localhost', async () => {
   console.log(`服务器运行在端口 ${PORT}`);
   console.log(`健康检查: http://localhost:${PORT}/health`);
   console.log(`API文档: http://localhost:${PORT}/api-docs`);
+  console.log(`服务器正在监听地址: ${server.address().address}:${server.address().port}`);
   
   // 测试数据库连接
   try {
     await db.testConnection();
     console.log('数据库连接测试完成');
+    console.log('服务器正在运行，等待请求...');
   } catch (error) {
     console.error('数据库连接测试失败:', error);
   }
 });
+
+// 监听服务器错误
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`端口 ${PORT} 已被占用`);
+  } else {
+    console.error('服务器启动错误:', err);
+  }
+  process.exit(1);
+});
+
+// 保持进程运行
+process.stdin.resume();
 
 // 优雅关闭
 process.on('SIGTERM', () => {

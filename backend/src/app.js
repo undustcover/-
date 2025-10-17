@@ -11,7 +11,11 @@ const app = express();
 // 中间件配置
 app.use(helmet()); // 安全头
 app.use(cors({
-  origin: [process.env.FRONTEND_URL || 'http://localhost:5173', 'http://localhost:5174'],
+  origin: [
+    process.env.FRONTEND_URL || 'http://localhost:5173', 
+    'http://localhost:5174',
+    'http://localhost:4173'  // 添加前端预览服务器地址
+  ],
   credentials: true
 })); // 跨域
 

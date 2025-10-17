@@ -1,0 +1,68 @@
+# 依赖目录
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# 构建输出
+dist
+dist-ssr
+*.local
+
+# 编辑器目录和文件
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# 日志文件
+logs
+*.log
+
+# 运行时数据
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# 覆盖率目录
+coverage
+.nyc_output
+
+# 环境变量文件
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Git文件
+.git
+.gitignore
+
+# Docker文件
+Dockerfile
+.dockerignore
+
+# 文档文件
+README.md
+*.md
+
+# 测试文件
+__tests__
+*.test.ts
+*.test.js
+*.spec.ts
+*.spec.js
+
+# TypeScript配置
+tsconfig.json
+tsconfig.*.json
+
+# Vite配置
+vite.config.ts

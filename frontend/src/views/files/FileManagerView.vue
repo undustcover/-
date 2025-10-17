@@ -15,12 +15,26 @@
           :on-success="handleUploadSuccess"
           :on-error="handleUploadError"
           :before-upload="beforeUpload"
-          :show-file-list="false"
+          :auto-upload="false"
           multiple
         >
-          <el-button type="primary">
-            <el-icon><Upload /></el-icon>
-            上传文件
+          <template #trigger>
+            <el-button type="primary">
+              <el-icon><Upload /></el-icon>
+              选择文件
+            </el-button>
+          </template>
+          <template #tip>
+            <div class="el-upload__tip">
+              选择文件后点击开始上传按钮
+            </div>
+          </template>
+          <el-button
+            style="margin-left: 10px;"
+            type="success"
+            @click="submitUpload"
+          >
+            开始上传
           </el-button>
         </el-upload>
         
@@ -133,7 +147,7 @@
                 <el-icon class="file-icon" :class="getFileIconClass(row)">
                   <component :is="getFileIcon(row)" />
                 </el-icon>
-                <span class="file-name">{{ row.original_name || row.filename }}</span>
+                <span class="file-name">{{ row.name || row.original_name || row.filename }}</span>
               </div>
             </template>
           </el-table-column>
@@ -203,8 +217,8 @@
             </div>
             
             <div class="file-card-info">
-              <div class="file-card-name" :title="file.original_name || file.filename">
-                {{ file.original_name || file.filename }}
+              <div class="file-card-name" :title="file.name || file.original_name || file.filename">
+                {{ file.name || file.original_name || file.filename }}
               </div>
               <div class="file-card-meta">
                 <span class="file-size">
@@ -408,7 +422,7 @@ const filteredFiles = computed(() => {
 })
 
 const uploadUrl = computed(() => {
-  return `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'}/api/files/upload`
+  return `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api'}/files/upload`
 })
 
 const uploadHeaders = computed(() => {
@@ -541,8 +555,14 @@ const handleSelectionChange = (selection: any[]) => {
 
 // 处理双击
 const handleDoubleClick = (file: FileInfo) => {
-  // 直接下载文件
-  downloadFile(file)
+  if (file.is_folder || file.type === 'folder') {
+    // 进入文件夹
+    const newPath = currentPath.value ? `${currentPath.value}/${file.original_name || file.name}` : (file.original_name || file.name)
+    navigateToPath(newPath)
+  } else {
+    // 下载文件
+    downloadFile(file)
+  }
 }
 
 // 下载文件
@@ -563,7 +583,7 @@ const downloadFile = async (file: FileInfo) => {
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = file.original_name || file.filename
+    link.download = file.name || file.original_name || file.filename
     link.style.display = 'none'
     document.body.appendChild(link)
     link.click()
@@ -588,7 +608,7 @@ const downloadFile = async (file: FileInfo) => {
 const deleteFile = async (file: FileInfo) => {
   try {
     await ElMessageBox.confirm(
-      `确定要删除文件 "${file.original_name || file.filename}" 吗？`,
+      `确定要删除文件 "${file.name || file.original_name || file.filename}" 吗？`,
       '确认删除',
       {
         confirmButtonText: '确定',
@@ -614,12 +634,11 @@ const createFolder = async () => {
     await formRef.validate()
     creating.value = true
     
-    // TODO: 实现创建文件夹API
-    // await filesApi.createFolder({
-    //   name: folderForm.name,
-    //   path: currentPath.value
-    // })
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    // 调用创建文件夹API
+    await filesApi.createFolder({
+      name: folderForm.name,
+      path: currentPath.value
+    })
     
     ElMessage.success('文件夹创建成功')
     showCreateFolderDialog.value = false
@@ -698,6 +717,14 @@ const handleUploadSuccess = (response: any, file: any) => {
 const handleUploadError = (error: any, file: any) => {
   console.error('上传失败:', error)
   ElMessage.error(`${file.name} 上传失败`)
+}
+
+// 手动提交上传
+const submitUpload = () => {
+  const upload = uploadRef.value
+  if (upload) {
+    upload.submit()
+  }
 }
 
 // 重复的工具函数已在上方定义

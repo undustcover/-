@@ -4,23 +4,49 @@ import type { AxiosResponse } from 'axios'
 // 文件信息接口
 export interface FileInfo {
   id: string
-  filename: string
-  original_name: string
-  file_size: number
-  file_type: string
-  file_path: string
+  name: string
+  filename?: string
+  original_name?: string
+  file_size?: number
+  size?: number
+  file_type?: string
+  type: 'file' | 'folder'
+  file_path?: string
+  path?: string
+  mime_type?: string
   task_id?: string
-  uploaded_by: string
-  uploaded_at: string
-  updated_at: string
+  uploaded_by?: string
+  uploaded_at?: string
+  created_at?: string
+  updated_at?: string
+}
+
+// 文件夹创建请求接口
+export interface CreateFolderRequest {
+  name: string
+  path?: string
+}
+
+// 文件夹创建响应接口
+export interface CreateFolderResponse {
+  message: string
+  folder: FileInfo
 }
 
 // 文件列表响应接口
 export interface FileListResponse {
   files: FileInfo[]
-  total: number
-  page: number
-  limit: number
+  // 新版后端响应，将分页信息放在 pagination 中
+  pagination?: {
+    page: number
+    limit: number
+    total: number
+    pages?: number
+  }
+  // 兼容旧版顶层字段
+  total?: number
+  page?: number
+  limit?: number
 }
 
 // 文件上传响应接口
@@ -37,11 +63,17 @@ export const filesApi = {
     task_id?: string
     page?: number
     limit?: number
+    currentPath?: string
     search?: string
     sort_by?: string
     sort_order?: 'asc' | 'desc'
   }): Promise<AxiosResponse<FileListResponse>> => {
     return request.get('/files', { params })
+  },
+
+  // 创建文件夹
+  createFolder: (data: CreateFolderRequest): Promise<AxiosResponse<CreateFolderResponse>> => {
+    return request.post('/files/folder', data)
   },
 
   // 获取文件详情

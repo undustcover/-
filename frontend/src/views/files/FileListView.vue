@@ -100,7 +100,7 @@
               <el-icon class="file-icon" :style="{ color: getFileIconColor(row) }">
                 <component :is="getFileIcon(row)" />
               </el-icon>
-              <span class="file-name" @click="handleFileClick(row)">{{ row.original_name || row.filename }}</span>
+              <span class="file-name" @click="handleFileClick(row)">{{ row.name || row.original_name || row.filename }}</span>
             </div>
           </template>
         </el-table-column>
@@ -162,7 +162,7 @@
           </div>
           
           <div class="file-card-info">
-            <div class="file-card-name" :title="file.original_name || file.filename">{{ file.original_name || file.filename }}</div>
+            <div class="file-card-name" :title="file.name || file.original_name || file.filename">{{ file.name || file.original_name || file.filename }}</div>
             <div class="file-card-meta">
               <span>{{ getFileTypeText(file) }}</span>
               <span>{{ formatFileSize(file.file_size) }}</span>
@@ -222,6 +222,8 @@
           :on-success="handleUploadSuccess"
           :on-error="handleUploadError"
           :on-progress="handleUploadProgress"
+          :on-change="handleUploadChange"
+          :on-remove="handleUploadRemove"
           :before-upload="beforeUpload"
           :file-list="uploadFileList"
           :auto-upload="false"
@@ -431,7 +433,29 @@ const pathSegments = computed(() => {
 })
 
 const filteredFiles = computed(() => {
-  return files.value
+  const cp = currentPath.value || ''
+  const isDirectChild = (f: FileInfo) => {
+    const fp = (f.path || '')
+    if (!cp) {
+      // 根目录：仅显示根级的直接子项（file_path为空或不含"/")
+      if (f.type === 'folder') return fp === ''
+      return fp === '' || !fp.includes('/')
+    }
+    if (f.type === 'folder') {
+      // 文件夹记录的file_path为父路径，当前目录只显示file_path等于当前路径的文件夹
+      return fp === cp
+    }
+    // 文件记录历史上存在两种存储：
+    // 1) file_path 等于父路径（新逻辑）
+    // 2) file_path 等于 "父路径/文件名"（旧逻辑）
+    if (fp === cp) return true
+    const prefix = cp + '/'
+    if (!fp.startsWith(prefix)) return false
+    const remaining = fp.substring(prefix.length)
+    // 仅保留直接子项：剩余部分不包含进一步的"/"
+    return !remaining.includes('/')
+  }
+  return files.value.filter(isDirectChild)
 })
 
 const paginatedFiles = computed(() => {
@@ -439,7 +463,8 @@ const paginatedFiles = computed(() => {
 })
 
 const uploadUrl = computed(() => {
-  return `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'}/api/files/upload`
+  // 使用已包含 /api 的基础地址，避免重复拼接 /api
+  return `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api'}/files/upload`
 })
 
 const uploadHeaders = computed(() => {
@@ -449,8 +474,9 @@ const uploadHeaders = computed(() => {
 })
 
 const uploadData = computed(() => {
+  // 将当前目录路径传给后端，实现按文件夹隔离上传
   return {
-    task_id: 1 // 默认任务ID，实际应该从路由或上下文获取
+    path: currentPath.value
   }
 })
 
@@ -559,8 +585,9 @@ const handleFileClick = (file: any) => {
 // 处理文件双击
 const handleFileDoubleClick = (file: any) => {
   if (file.type === 'folder') {
-    // 进入文件夹
-    currentPath.value = file.path
+    // 进入文件夹 - 使用正确的路径构建逻辑
+    const newPath = currentPath.value ? `${currentPath.value}/${file.name}` : file.name
+    currentPath.value = newPath
     loadFiles()
   } else {
     // 预览或下载文件
@@ -620,21 +647,21 @@ const createFolder = async () => {
     )
     
     if (folderName) {
-      // TODO: 调用API创建文件夹
-      const newFolder = {
-        id: Date.now().toString(),
+      // 调用API创建文件夹
+      await filesApi.createFolder({
         name: folderName,
-        type: 'folder',
-        size: 0,
-        modifiedTime: dayjs().format('YYYY-MM-DD HH:mm:ss'),
-        path: `${currentPath.value}/${folderName}`
-      }
+        path: currentPath.value
+      })
       
-      files.value.unshift(newFolder)
       ElMessage.success('文件夹创建成功')
+      // 重新加载文件列表
+      loadFiles()
     }
-  } catch {
-    // 用户取消
+  } catch (error) {
+    if (error !== false) { // 不是用户取消
+      console.error('创建文件夹失败:', error)
+      ElMessage.error('创建文件夹失败')
+    }
   }
 }
 
@@ -656,7 +683,7 @@ const downloadFile = async (file: FileInfo) => {
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = file.original_name || file.filename
+    link.download = file.name || file.original_name || file.filename
     link.style.display = 'none'
     document.body.appendChild(link)
     link.click()
@@ -704,7 +731,7 @@ const confirmRename = async () => {
 const deleteFile = async (file: FileInfo) => {
   try {
     await ElMessageBox.confirm(
-      `确定要删除文件 "${file.original_name || file.filename}" 吗？`,
+      `确定要删除文件 "${file.name || file.original_name || file.filename}" 吗？`,
       '确认删除',
       {
         confirmButtonText: '确定',
@@ -771,12 +798,8 @@ const handleUploadSuccess = (response: any, file: any) => {
   uploadProgress.current++
   uploadProgress.percentage = Math.round((uploadProgress.current / uploadProgress.total) * 100)
   
-  if (response.success) {
-    ElMessage.success(`${file.name} 上传成功`)
-  } else {
-    ElMessage.error(response.message || `${file.name} 上传失败`)
-    uploadProgress.status = 'exception'
-  }
+  // on-success 仅在服务端返回 2xx 时触发，这里直接提示成功
+  ElMessage.success(`${file.name} 上传成功`)
   
   // 所有文件上传完成
   if (uploadProgress.current >= uploadProgress.total) {
@@ -811,6 +834,16 @@ const handleUploadError = (error: any, file: any) => {
 // 上传进度
 const handleUploadProgress = (event: any, file: any) => {
   uploadProgress.currentFile = file.name
+}
+
+// 选择文件变更（受控 file-list 同步）
+const handleUploadChange = (file: any, files: any[]) => {
+  uploadFileList.value = files
+}
+
+// 移除文件（受控 file-list 同步）
+const handleUploadRemove = (file: any, files: any[]) => {
+  uploadFileList.value = files
 }
 
 // 获取文件扩展名
@@ -874,7 +907,8 @@ const isTextFile = (file: FileInfo | null): boolean => {
 // 获取预览URL
 const getPreviewUrl = (file: FileInfo | null): string => {
   if (!file) return ''
-  return `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'}/api/files/preview/${file.id}`
+  // 使用已包含 /api 的基础地址，避免重复拼接 /api
+  return `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api'}/files/preview/${file.id}`
 }
 
 // 图片加载成功
@@ -894,13 +928,15 @@ const loadFiles = async () => {
     const response = await filesApi.getFiles({
       page: currentPage.value,
       limit: pageSize.value,
+      currentPath: currentPath.value, // 与后端参数保持一致
       search: searchKeyword.value || undefined,
       sort_by: sortBy.value,
       sort_order: 'desc'
     })
     
     files.value = response.data.files
-    total.value = response.data.total
+    // 前端按直接子项过滤后，使用过滤结果的长度作为当前页的总数显示
+    total.value = filteredFiles.value.length
   } catch (error) {
     console.error('加载文件列表失败:', error)
     ElMessage.error('加载文件列表失败')
