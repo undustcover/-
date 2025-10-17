@@ -2,12 +2,13 @@ const app = require('./app');
 const db = require('./config/database');
 
 const PORT = process.env.PORT || 8080;
+const HOST = process.env.HOST || '0.0.0.0';
 
 // 启动服务器
-const server = app.listen(PORT, 'localhost', async () => {
+const server = app.listen(PORT, HOST, async () => {
   console.log(`服务器运行在端口 ${PORT}`);
-  console.log(`健康检查: http://localhost:${PORT}/health`);
-  console.log(`API文档: http://localhost:${PORT}/api-docs`);
+  console.log(`健康检查: http://${HOST}:${PORT}/health`);
+  console.log(`API文档: http://${HOST}:${PORT}/api-docs`);
   console.log(`服务器正在监听地址: ${server.address().address}:${server.address().port}`);
   
   // 测试数据库连接

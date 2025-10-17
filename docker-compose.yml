@@ -6,9 +6,10 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: task-management-backend
+    image: task-manager-backend:latest
+    container_name: task-manager-backend
     ports:
-      - "8080:8080"
+      - "8081:8080"
     environment:
       - NODE_ENV=production
       - PORT=8080
@@ -39,9 +40,10 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: task-management-frontend
+    image: task-manager-frontend:latest
+    container_name: task-manager-frontend
     ports:
-      - "80:80"
+      - "8082:80"
     depends_on:
       backend:
         condition: service_healthy

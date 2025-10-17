@@ -27,41 +27,43 @@ vim .env.production
 
 ### 3. 构建并启动服务
 ```bash
-# 构建并启动所有服务
-docker-compose up -d --build
+# 使用 Compose 项目名统一为 task-manager 构建并启动
+docker compose -p task-manager up -d --build
 
 # 查看服务状态
-docker-compose ps
+docker compose -p task-manager ps
 
 # 查看日志
-docker-compose logs -f
+docker compose -p task-manager logs -f
 ```
 
 ### 4. 访问应用
 
-- 前端应用：http://localhost
-- 后端API：http://localhost:8080
-- API文档：http://localhost:8080/api-docs
-- 健康检查：http://localhost:8080/health
+- 前端应用：`http://localhost:8082`
+- 后端API：`http://localhost:8081`
+- API文档：`http://localhost:8081/api-docs`
+- 健康检查：`http://localhost:8081/health`
+
+说明：如需使用传统端口（`80`/`8080`），请确保宿主机未占用这些端口，并在 `docker-compose.yml` 中将 `ports` 映射改回 `80:80` 和 `8080:8080` 后重启。
 
 ## 常用命令
 
 ### 服务管理
 ```bash
 # 启动服务
-docker-compose up -d
+docker compose -p task-manager up -d
 
 # 停止服务
-docker-compose down
+docker compose -p task-manager down
 
 # 重启服务
-docker-compose restart
+docker compose -p task-manager up -d --build
 
 # 查看服务状态
-docker-compose ps
+docker compose -p task-manager ps
 
 # 查看日志
-docker-compose logs -f [service-name]
+docker compose -p task-manager logs -f [service-name]
 ```
 
 ### 数据管理
@@ -108,9 +110,13 @@ docker image prune -f
 
 1. **端口冲突**
    ```bash
-   # 检查端口占用
-   netstat -tulpn | grep :80
-   netstat -tulpn | grep :8080
+   # Windows 检查端口占用
+   netstat -ano | findstr :80
+   netstat -ano | findstr :8080
+
+   # 释放旧容器占用的端口
+   docker stop task-management-frontend task-management-backend
+   docker rm task-management-frontend task-management-backend
    ```
 
 2. **内存不足**
@@ -127,8 +133,11 @@ docker image prune -f
 
 4. **前端无法访问后端**
    ```bash
-   # 检查网络连接
-   docker-compose exec frontend ping backend
+   # 验证后端健康检查（宿主机）
+   curl -i http://localhost:8081/health
+
+   # 验证前端到后端代理（宿主机）
+   curl -i -X POST http://localhost:8082/api/auth/login -H "Content-Type: application/json" -d '{"username":"admin","password":"admin123"}'
    ```
 
 ### 重置系统
