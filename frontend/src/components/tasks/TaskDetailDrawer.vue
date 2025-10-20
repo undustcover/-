@@ -192,13 +192,13 @@
             class="comment-item"
           >
             <div class="comment-avatar">
-              <el-avatar :size="32" :src="comment.user.avatar">
-                {{ comment.user.real_name?.charAt(0) }}
+              <el-avatar :size="32" :src="comment.user?.avatar">
+                {{ comment.user?.real_name?.charAt(0) || '?' }}
               </el-avatar>
             </div>
             <div class="comment-content">
               <div class="comment-header">
-                <span class="comment-user">{{ comment.user.real_name }}</span>
+                <span class="comment-user">{{ comment.user?.real_name || '未知用户' }}</span>
                 <span class="comment-time">{{ formatDateTime(comment.created_at) }}</span>
               </div>
               <div class="comment-text">{{ comment.content }}</div>
@@ -236,6 +236,7 @@ import TaskEditDialog from './TaskEditDialog.vue'
 import type { Task, TaskComment } from '@/types/task'
 import { filesApi } from '@/api/files'
 import { useAuthStore } from '@/stores/auth'
+import { taskApi } from '@/api/tasks'
 
 // Props
 interface Props {
@@ -405,20 +406,11 @@ const addComment = async () => {
   if (!newComment.value.trim() || !props.task) return
   
   try {
-    // TODO: 调用API添加评论
-    const comment: TaskComment = {
-      id: Date.now().toString(),
-      task_id: props.task.id,
-      user: {
-        id: '1',
-        real_name: '当前用户',
-        avatar: ''
-      },
-      content: newComment.value.trim(),
-      created_at: new Date().toISOString()
+    const res = await taskApi.addTaskComment(props.task.id, newComment.value.trim())
+    const newOne: any = (res.data as any)?.comment ?? res.data
+    if (newOne) {
+      comments.value.unshift(newOne)
     }
-    
-    comments.value.unshift(comment)
     newComment.value = ''
     ElMessage.success('评论添加成功')
   } catch (error) {
@@ -442,21 +434,13 @@ const handleClose = () => {
 const loadComments = async () => {
   if (!props.task) return
   
-  // TODO: 调用API获取评论
-  // 模拟数据
-  comments.value = [
-    {
-      id: '1',
-      task_id: props.task.id,
-      user: {
-        id: '2',
-        real_name: '张三',
-        avatar: ''
-      },
-      content: '这个任务需要注意数据库性能优化',
-      created_at: '2024-01-10T10:30:00Z'
-    }
-  ]
+  try {
+    const res = await taskApi.getTaskComments(props.task.id)
+    const list: any[] = (res.data as any)?.comments ?? (res.data as any)?.data ?? []
+    comments.value = list
+  } catch (error) {
+    comments.value = []
+  }
 }
 
 // 监听任务变化

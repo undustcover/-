@@ -304,6 +304,63 @@
         />
       </div>
     </el-card>
+
+    <!-- 逾期任务明细 -->
+    <el-card class="table-card">
+      <template #header>
+        <div class="table-header">
+          <span>逾期任务明细</span>
+          <div class="table-actions">
+            <el-input
+              v-model="overdueKeyword"
+              placeholder="搜索任务"
+              clearable
+              style="width: 240px;"
+              @change="fetchOverdueTasks"
+            >
+              <template #prefix>
+                <el-icon><Search /></el-icon>
+              </template>
+            </el-input>
+          </div>
+        </div>
+      </template>
+
+      <el-table
+        :data="overdueItems"
+        stripe
+        style="width: 100%"
+        v-loading="overdueLoading"
+      >
+        <el-table-column prop="title" label="任务标题" min-width="220" />
+        <el-table-column prop="assignee_name" label="负责人" width="120" />
+        <el-table-column prop="assignee_department" label="岗位" width="140" />
+        <el-table-column prop="priority" label="优先级" width="90" />
+        <el-table-column prop="status" label="状态" width="100" />
+        <el-table-column prop="due_date" label="截止日期" width="160">
+          <template #default="{ row }">
+            {{ formatDate(row.due_date) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="days_overdue" label="逾期天数" width="100" align="center">
+          <template #default="{ row }">
+            <span class="overdue-count">{{ row.days_overdue }}</span>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <div class="pagination-container">
+        <el-pagination
+          v-model:current-page="overduePage"
+          v-model:page-size="overduePageSize"
+          :total="overdueTotal"
+          :page-sizes="[10, 20, 50]"
+          layout="total, sizes, prev, pager, next, jumper"
+          @size-change="handleOverdueSizeChange"
+          @current-change="handleOverdueCurrentChange"
+        />
+      </div>
+    </el-card>
   </div>
 </template>
 
@@ -331,8 +388,18 @@ const dateRange = ref<[string, string] | null>(null)
 const trendPeriod = ref<'week' | 'month' | 'quarter'>('month')
 const selectedDepartment = ref('')
 const searchKeyword = ref('')
+
+// 用户绩效表格分页
 const currentPage = ref(1)
 const pageSize = ref(20)
+
+// 逾期任务明细列表状态
+const overdueItems = ref<any[]>([])
+const overdueTotal = ref(0)
+const overdueLoading = ref(false)
+const overduePage = ref(1)
+const overduePageSize = ref(10)
+const overdueKeyword = ref('')
 
 // 图表引用
 const trendChartRef = ref()
@@ -402,6 +469,44 @@ const filteredTableData = computed(() => {
   
   return data.slice(start, end)
 })
+
+// 工具函数：日期格式化
+const formatDate = (d: string) => d ? dayjs(d).format('YYYY-MM-DD HH:mm') : '-'
+
+// 获取逾期任务明细
+const fetchOverdueTasks = async () => {
+  overdueLoading.value = true
+  try {
+    const params = {
+      start_date: dateRange.value?.[0],
+      end_date: dateRange.value?.[1],
+      department: selectedDepartment.value || undefined,
+      keyword: overdueKeyword.value || undefined,
+      page: overduePage.value,
+      limit: overduePageSize.value
+    }
+    const resp = await api.reports.getOverdueTasks(params)
+    const { items = [], total = 0 } = resp.data || {}
+    overdueItems.value = items
+    overdueTotal.value = total
+  } catch (e) {
+    console.error('获取逾期任务明细失败:', e)
+    ElMessage.error('获取逾期任务明细失败')
+  } finally {
+    overdueLoading.value = false
+  }
+}
+
+// 逾期表格分页变更
+const handleOverdueSizeChange = (size: number) => {
+  overduePageSize.value = size
+  overduePage.value = 1
+  fetchOverdueTasks()
+}
+const handleOverdueCurrentChange = (page: number) => {
+  overduePage.value = page
+  fetchOverdueTasks()
+}
 
 // 获取效率评分类型
 const getEfficiencyType = (efficiency: string) => {
@@ -687,7 +792,8 @@ const refreshData = async () => {
       fetchTasksStats(),
       fetchTasksTrend(),
       fetchWorkTypesStats(),
-      fetchUsersPerformance()
+      fetchUsersPerformance(),
+      fetchOverdueTasks()
     ])
     
     // 更新所有图表

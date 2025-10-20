@@ -472,3 +472,94 @@ router.get('/export/tasks', requireManager, async (req, res) => {
 });
 
 module.exports = router;
+
+// 获取逾期任务明细列表
+router.get('/tasks/overdue', requireManager, async (req, res) => {
+  try {
+    const {
+      start_date,
+      end_date,
+      department,
+      user_id,
+      keyword,
+      page = 1,
+      limit = 10
+    } = req.query;
+
+    const pageNum = parseInt(page) || 1;
+    const pageSize = parseInt(limit) || 10;
+
+    let whereConditions = [
+      "t.status != 'deleted'",
+      "(t.status = 'overdue' OR (t.due_date < datetime('now', 'localtime') AND t.status NOT IN ('completed','cancelled')))"
+    ];
+    let params = [];
+
+    if (start_date) {
+      whereConditions.push('t.due_date >= ?');
+      params.push(start_date);
+    }
+    if (end_date) {
+      whereConditions.push('t.due_date <= ?');
+      params.push(end_date);
+    }
+    if (department) {
+      whereConditions.push('u.department = ?');
+      params.push(department);
+    }
+    if (user_id) {
+      whereConditions.push('t.assigned_to = ?');
+      params.push(user_id);
+    }
+    if (keyword) {
+      whereConditions.push('(t.title LIKE ? OR t.description LIKE ?)');
+      const like = `%${keyword}%`;
+      params.push(like, like);
+    }
+
+    const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
+
+    const countSql = `
+      SELECT COUNT(*) as total
+      FROM tasks t
+      LEFT JOIN users u ON t.assigned_to = u.id
+      ${whereClause}
+    `;
+    const totalRows = await query(countSql, params);
+    const total = totalRows?.[0]?.total || 0;
+
+    const listSql = `
+      SELECT 
+        t.id,
+        t.title,
+        t.description,
+        t.priority,
+        t.status,
+        t.category,
+        t.due_date,
+        t.created_at,
+        t.updated_at,
+        u.real_name AS assignee_name,
+        u.department AS assignee_department,
+        CAST((julianday(datetime('now', 'localtime')) - julianday(t.due_date)) AS INT) AS days_overdue
+      FROM tasks t
+      LEFT JOIN users u ON t.assigned_to = u.id
+      ${whereClause}
+      ORDER BY t.due_date ASC
+      LIMIT ? OFFSET ?
+    `;
+    const listParams = params.concat([pageSize, (pageNum - 1) * pageSize]);
+    const items = await query(listSql, listParams);
+
+    res.json({
+      message: '获取逾期任务明细成功',
+      total,
+      page: pageNum,
+      limit: pageSize,
+      items
+    });
+  } catch (error) {
+    console.error('获取逾期任务明细错误:', error);
+    res.status(500).json({ error: '获取逾期任务明细失败' });
+  }
+});

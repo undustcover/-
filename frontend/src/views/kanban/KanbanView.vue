@@ -7,6 +7,10 @@
           <el-icon><Refresh /></el-icon>
           刷新
         </el-button>
+        <el-button type="warning" @click="clearTestTasks">
+          <el-icon><Delete /></el-icon>
+          清理测试条目
+        </el-button>
         <el-button type="primary" @click="showCreateDialog = true">
           <el-icon><Plus /></el-icon>
           新建任务
@@ -68,7 +72,40 @@
         </div>
       </div>
     </el-card>
-    
+
+    <!-- 逾期任务列表视图 -->
+    <el-card class="overdue-card" v-if="overdueTasks.length">
+      <template #header>
+        <div class="overdue-header">
+          <span>逾期任务（{{ overdueTasks.length }}）</span>
+        </div>
+      </template>
+      <el-table :data="overdueTasks" size="small" style="width: 100%">
+        <el-table-column prop="id" label="ID" width="80"/>
+        <el-table-column prop="title" label="标题"/>
+        <el-table-column label="负责人" width="140">
+          <template #default="{ row }">
+            <span>{{ row.assignee?.real_name || '未分配' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="截止时间" width="160">
+          <template #default="{ row }">
+            <span class="overdue-time">{{ formatDate(row.due_date) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="120">
+          <template #default="{ row }">
+            <span class="overdue-status">{{ getStatusText(row.status) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="120">
+          <template #default="{ row }">
+            <el-button type="primary" text size="small" @click="viewTask(row)">查看</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+
     <!-- 看板主体 -->
     <div class="kanban-board" v-loading="loading">
       <div
@@ -91,7 +128,7 @@
               </el-button>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item @click="addTask(column.status)">
+                  <el-dropdown-item v-if="column.status !== 'completed'" @click="addTask(column.status)">
                     <el-icon><Plus /></el-icon>
                     添加任务
                   </el-dropdown-item>
@@ -196,7 +233,7 @@
           </div>
           
           <!-- 添加任务按钮 -->
-          <div class="add-task-btn" @click="addTask(column.status)">
+          <div class="add-task-btn" v-if="column.status !== 'completed'" @click="addTask(column.status)">
             <el-icon><Plus /></el-icon>
             <span>添加任务</span>
           </div>
@@ -266,11 +303,22 @@ const users = ref([
 const columnConfig = [
   { status: 'pending', name: '待处理', color: '#909399' },
   { status: 'in_progress', name: '进行中', color: '#E6A23C' },
-  { status: 'testing', name: '测试中', color: '#409EFF' },
   { status: 'completed', name: '已完成', color: '#67C23A' }
 ]
 
 // 计算属性
+const overdueTasks = computed(() => {
+  return tasksStore.tasks
+    .filter(t => {
+      if (isTestTask(t)) return false
+      if (!t.due_date) return false
+      const overdue = dayjs(t.due_date).isBefore(dayjs(), 'day')
+      const notCompleted = t.status !== 'completed'
+      return overdue && notCompleted
+    })
+    .sort((a, b) => dayjs(a.due_date).valueOf() - dayjs(b.due_date).valueOf())
+})
+
 const columns = computed(() => {
   return columnConfig.map(config => ({
     ...config,
@@ -292,6 +340,9 @@ const filteredTasks = computed(() => {
   if (filters.category) {
     tasks = tasks.filter(task => task.category === filters.category)
   }
+
+  // 隐藏所有“测试”类任务
+  tasks = tasks.filter(t => !isTestTask(t))
   
   return tasks
 })
@@ -339,6 +390,17 @@ const getTypeText = (category: string) => {
     '综合工作': '综合工作'
   }
   return textMap[category] || category || '未知类型'
+}
+
+const getStatusText = (status: string) => {
+  const texts: Record<string, string> = {
+    pending: '待处理',
+    in_progress: '进行中',
+    testing: '测试中',
+    completed: '已完成',
+    cancelled: '已取消'
+  }
+  return texts[status] || status
 }
 
 // 检查是否逾期
@@ -404,6 +466,10 @@ const viewTask = (task: Task) => {
 
 // 添加任务
 const addTask = (status: string) => {
+  if (status === 'completed') {
+    ElMessage.info('已完成列不支持新增任务')
+    return
+  }
   defaultStatus.value = status
   showCreateDialog.value = true
 }
@@ -444,6 +510,37 @@ const resetFilters = () => {
     priority: '',
     category: ''
   })
+}
+
+// 清理测试条目
+const isTestTask = (t: Task) => {
+  const title = (t.title || '').toLowerCase()
+  const tags = (t.tags || []).map(s => s.toLowerCase())
+  const cat = (t.category || '').toLowerCase()
+  return t.status === 'testing' ||
+    title.includes('测试') ||
+    title.includes('test') ||
+    tags.some(x => x.includes('测试') || x.includes('test')) ||
+    cat.includes('测试') ||
+    cat.includes('test')
+}
+
+const clearTestTasks = async () => {
+  const testTasks = tasksStore.tasks.filter(isTestTask)
+  if (!testTasks.length) {
+    ElMessage.info('没有检测到测试条目')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(`确定删除 ${testTasks.length} 条测试任务吗？`, '清理测试条目', { type: 'warning' })
+    await Promise.all(testTasks.map(t => tasksStore.deleteTask(t.id)))
+    ElMessage.success('测试条目已清理')
+    await fetchTasks()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('清理失败')
+    }
+  }
 }
 
 // 刷新看板
@@ -490,6 +587,24 @@ onMounted(() => {
 
 .filter-card {
   margin-bottom: 20px;
+}
+
+.overdue-card {
+  margin-bottom: 20px;
+}
+
+.overdue-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.overdue-time {
+  color: var(--el-color-danger);
+}
+
+.overdue-status {
+  color: var(--el-text-color-secondary);
 }
 
 .filter-row {

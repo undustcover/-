@@ -58,6 +58,18 @@ export const reportsApi = {
       params,
       responseType: 'blob'
     })
+  },
+  // 获取逾期任务明细
+  getOverdueTasks: (params?: {
+    start_date?: string
+    end_date?: string
+    department?: string
+    user_id?: string
+    keyword?: string
+    page?: number
+    limit?: number
+  }) => {
+    return request.get('/reports/tasks/overdue', { params })
   }
 }
 

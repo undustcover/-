@@ -121,6 +121,12 @@ export interface TaskComment {
   content: string
   created_at: string
   updated_at: string
+  // 新增：后端返回的嵌套用户信息（用于头像和姓名显示）
+  user?: {
+    id: string
+    real_name: string
+    avatar?: string
+  }
 }
 
 // 任务历史记录
