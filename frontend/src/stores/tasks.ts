@@ -55,8 +55,38 @@ export const useTasksStore = defineStore('tasks', () => {
         tags = t.tags.split(',').filter(Boolean)
       }
     }
+
+    const contract_number: string | undefined = t?.contract_number ?? undefined
+    const annual_revenue_plan: number | null = (t?.annual_revenue_plan !== undefined && t?.annual_revenue_plan !== null)
+      ? Number(t.annual_revenue_plan)
+      : null
+    const contract_amount: number | null = (t?.contract_amount !== undefined && t?.contract_amount !== null)
+      ? Number(t.contract_amount)
+      : null
+    const client_owner: string | undefined = t?.client_owner ?? undefined
+    const contract_start_date: string | undefined = t?.contract_start_date ?? undefined
+    const contract_end_date: string | undefined = t?.contract_end_date ?? undefined
+    const actual_revenue: number | null = (t?.actual_revenue !== undefined && t?.actual_revenue !== null)
+      ? Number(t.actual_revenue)
+      : null
+    const actual_value_workload: number | null = (t?.actual_value_workload !== undefined && t?.actual_value_workload !== null)
+      ? Number(t.actual_value_workload)
+      : null
+    const actual_cost: number | null = (t?.actual_cost !== undefined && t?.actual_cost !== null)
+      ? Number(t.actual_cost)
+      : null
+
     return {
       ...t,
+      contract_number,
+      contract_amount,
+      annual_revenue_plan,
+      client_owner,
+      contract_start_date,
+      contract_end_date,
+      actual_revenue,
+      actual_value_workload,
+      actual_cost,
       tags
     }
   }

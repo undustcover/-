@@ -46,6 +46,16 @@ CREATE TABLE IF NOT EXISTS tasks (
   due_date TIMESTAMP NULL COMMENT '截止日期',
   start_date TIMESTAMP NULL COMMENT '开始日期',
   completed_at TIMESTAMP NULL COMMENT '完成时间',
+  -- 项目管理新增字段
+  contract_number VARCHAR(100) COMMENT '合同编号',
+  contract_amount DECIMAL(14,2) DEFAULT 0 COMMENT '合同金额',
+  annual_revenue_plan DECIMAL(14,2) DEFAULT 0 COMMENT '年度收入计划',
+  client_owner VARCHAR(100) COMMENT '甲方业主',
+  contract_start_date DATE COMMENT '合同开始日期',
+  contract_end_date DATE COMMENT '合同结束日期',
+  actual_revenue DECIMAL(14,2) DEFAULT 0 COMMENT '实际收入',
+  actual_value_workload DECIMAL(14,2) DEFAULT 0 COMMENT '实际价值工作量',
+  actual_cost DECIMAL(14,2) DEFAULT 0 COMMENT '实际成本',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   deleted_at TIMESTAMP NULL COMMENT '删除时间',
@@ -53,11 +63,11 @@ CREATE TABLE IF NOT EXISTS tasks (
   FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE SET NULL,
   FOREIGN KEY (parent_id) REFERENCES tasks(id) ON DELETE SET NULL,
   INDEX idx_title (title),
+  INDEX idx_contract_number (contract_number),
   INDEX idx_priority (priority),
   INDEX idx_status (status),
   INDEX idx_category (category),
   INDEX idx_created_by (created_by),
-  INDEX idx_assigned_to (assigned_to),
   INDEX idx_parent_id (parent_id),
   INDEX idx_due_date (due_date),
   INDEX idx_created_at (created_at),
@@ -182,7 +192,7 @@ CREATE TABLE IF NOT EXISTS system_configs (
 -- 插入默认管理员用户
 -- 密码: admin123 (请在生产环境中修改)
 INSERT INTO users (username, email, password_hash, real_name, role, status) VALUES 
-('admin', 'admin@example.com', '$2b$10$rQZ8kHWKtGY.ZvGY8sQxUeJ5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K', '系统管理员', 'super_admin', 'active')
+('admin', 'admin@example.com', '$2b$10$rQZ8kHWKtGY.ZvGY8sQxUeJ5K5K5K5K5K5K5K5K5K5K5K5K5K5K', '系统管理员', 'super_admin', 'active')
 ON DUPLICATE KEY UPDATE username = username;
 
 -- 插入默认系统配置

@@ -136,6 +136,70 @@
             </div>
           </el-card>
           
+          <!-- 项目制详情 -->
+          <el-card class="pm-card" v-if="isProjectCategory">
+            <template #header>
+              <span>项目制详情</span>
+            </template>
+            <div class="info-grid">
+              <div class="info-item">
+                <label>合同编号</label>
+                <span v-if="task.contract_number">{{ task.contract_number }}</span>
+                <span v-else class="text-placeholder">未填写</span>
+              </div>
+              <div class="info-item">
+                <label>合同金额</label>
+                <span v-if="task.contract_amount !== undefined && task.contract_amount !== null">
+                  {{ formatCurrency(task.contract_amount) }}
+                </span>
+                <span v-else class="text-placeholder">未填写</span>
+              </div>
+              <div class="info-item">
+                <label>年度营收计划</label>
+                <span v-if="task.annual_revenue_plan !== undefined && task.annual_revenue_plan !== null">
+                  {{ formatCurrency(task.annual_revenue_plan) }}
+                </span>
+                <span v-else class="text-placeholder">未填写</span>
+              </div>
+              <div class="info-item">
+                <label>客户负责人</label>
+                <span v-if="task.client_owner">{{ task.client_owner }}</span>
+                <span v-else class="text-placeholder">未填写</span>
+              </div>
+              <div class="info-item">
+                <label>合同开始日期</label>
+                <span v-if="task.contract_start_date">{{ formatDate(task.contract_start_date) }}</span>
+                <span v-else class="text-placeholder">未填写</span>
+              </div>
+              <div class="info-item">
+                <label>合同结束日期</label>
+                <span v-if="task.contract_end_date">{{ formatDate(task.contract_end_date) }}</span>
+                <span v-else class="text-placeholder">未填写</span>
+              </div>
+              <div class="info-item">
+                <label>实际营收</label>
+                <span v-if="task.actual_revenue !== undefined && task.actual_revenue !== null">
+                  {{ formatCurrency(task.actual_revenue) }}
+                </span>
+                <span v-else class="text-placeholder">未填写</span>
+              </div>
+              <div class="info-item">
+                <label>实际价值工作量</label>
+                <span v-if="task.actual_value_workload !== undefined && task.actual_value_workload !== null">
+                  {{ formatNumber(task.actual_value_workload) }}
+                </span>
+                <span v-else class="text-placeholder">未填写</span>
+              </div>
+              <div class="info-item">
+                <label>实际成本</label>
+                <span v-if="task.actual_cost !== undefined && task.actual_cost !== null">
+                  {{ formatCurrency(task.actual_cost) }}
+                </span>
+                <span v-else class="text-placeholder">未填写</span>
+              </div>
+            </div>
+          </el-card>
+          
           <!-- 任务描述 -->
           <el-card class="description-card">
             <template #header>
@@ -393,6 +457,10 @@ const uploadData = computed(() => ({
 // 计算属性
 const task = computed(() => tasksStore.currentTask)
 const parentTask = ref<Task | null>(null)
+const isProjectCategory = computed(() => {
+  const cat = task.value?.category
+  return cat === 'project_management' || cat === '项目管理'
+})
 
 // 获取状态类型
 const getStatusType = (status: string) => {
@@ -483,6 +551,24 @@ const formatFileSize = (size: number) => {
   if (size < 1024) return `${size} B`
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
   return `${(size / (1024 * 1024)).toFixed(1)} MB`
+}
+
+// 格式化日期（仅日期）
+const formatDate = (date: string) => {
+  if (!date) return ''
+  return dayjs(date).tz('Asia/Shanghai').format('YYYY-MM-DD')
+}
+
+// 货币格式化（保留两位小数，中文分组）
+const formatCurrency = (val: number) => {
+  if (val === null || val === undefined) return ''
+  return `¥${Number(val).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+// 数值格式化（最多两位小数，中文分组）
+const formatNumber = (val: number) => {
+  if (val === null || val === undefined) return ''
+  return Number(val).toLocaleString('zh-CN', { maximumFractionDigits: 2 })
 }
 
 // 删除任务
@@ -655,7 +741,12 @@ const addComment = async () => {
 // 处理编辑成功
 const handleEditSuccess = () => {
   showEditDialog.value = false
-  fetchTaskDetail()
+  // 自动关闭页面：若有浏览器历史记录则返回，否则进入任务列表
+  if (window.history.length > 1) {
+    router.back()
+  } else {
+    router.push('/tasks')
+  }
 }
 
 // 处理里程碑更新

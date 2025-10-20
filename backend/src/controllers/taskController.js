@@ -19,7 +19,16 @@ const createTask = async (req, res) => {
       tags,
       estimated_hours,
       status, // 获取 status
-      attachment_ids // 获取附件ID数组
+      attachment_ids, // 获取附件ID数组
+      contract_number,
+      contract_amount,
+      annual_revenue_plan,
+      client_owner,
+      contract_start_date,
+      contract_end_date,
+      actual_revenue,
+      actual_value_workload,
+      actual_cost
     } = req.body;
     
     // 兼容前端字段名
@@ -47,14 +56,23 @@ const createTask = async (req, res) => {
       category,
       tags,
       estimated_hours,
-      status // 传递 status
+      status, // 传递 status
+      contract_number,
+      contract_amount,
+      annual_revenue_plan,
+      client_owner,
+      contract_start_date,
+      contract_end_date,
+      actual_revenue,
+      actual_value_workload,
+      actual_cost
     });
     
     // 如果有附件，将附件关联到任务
     if (attachment_ids && attachment_ids.length > 0) {
       for (const fileId of attachment_ids) {
         await query(
-          'INSERT INTO task_files (task_id, file_id, created_at) VALUES (?, ?, NOW())',
+          'INSERT INTO task_files (task_id, file_id, created_at) VALUES (?, ?, CURRENT_TIMESTAMP)',
           [taskId, fileId]
         );
         

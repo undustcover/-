@@ -100,9 +100,46 @@ const taskSchemas = {
     assigned_to: Joi.number().integer().optional(),
     assignee_id: Joi.number().integer().optional(),
     parent_id: Joi.number().integer().allow(null).optional(),
-    category: Joi.string().valid('生产协调', '项目管理', '综合工作').optional(),
+    category: Joi.string().valid('生产协调', '项目管理', '综合工作', 'project_management').optional(),
     tags: Joi.array().items(Joi.string().max(30)).optional(),
-    estimated_hours: Joi.number().min(0).optional()
+    estimated_hours: Joi.number().min(0).optional(),
+    // 项目管理字段：当category为项目管理时必填
+    contract_number: Joi.string().when('category', {
+      is: Joi.valid('项目管理', 'project_management'),
+      then: Joi.string().required()
+    }).messages({ 'any.required': '合同编号为项目管理类目下必填' }),
+    contract_amount: Joi.number().min(0).when('category', {
+      is: Joi.valid('项目管理', 'project_management'),
+      then: Joi.required()
+    }).messages({ 'any.required': '合同金额为项目管理类目下必填' }),
+    annual_revenue_plan: Joi.number().min(0).when('category', {
+      is: Joi.valid('项目管理', 'project_management'),
+      then: Joi.required()
+    }).messages({ 'any.required': '年度营收计划为项目管理类目下必填' }),
+    client_owner: Joi.string().when('category', {
+      is: Joi.valid('项目管理', 'project_management'),
+      then: Joi.string().required()
+    }).messages({ 'any.required': '客户负责人为项目管理类目下必填' }),
+    contract_start_date: Joi.date().iso().when('category', {
+      is: Joi.valid('项目管理', 'project_management'),
+      then: Joi.required()
+    }).messages({ 'any.required': '合同开始日期为项目管理类目下必填' }),
+    contract_end_date: Joi.date().iso().when('category', {
+      is: Joi.valid('项目管理', 'project_management'),
+      then: Joi.required()
+    }).messages({ 'any.required': '合同结束日期为项目管理类目下必填' }),
+    actual_revenue: Joi.number().min(0).when('category', {
+      is: Joi.valid('项目管理', 'project_management'),
+      then: Joi.required()
+    }).messages({ 'any.required': '实际营收为项目管理类目下必填' }),
+    actual_value_workload: Joi.number().min(0).when('category', {
+      is: Joi.valid('项目管理', 'project_management'),
+      then: Joi.required()
+    }).messages({ 'any.required': '实际价值工作量为项目管理类目下必填' }),
+    actual_cost: Joi.number().min(0).when('category', {
+      is: Joi.valid('项目管理', 'project_management'),
+      then: Joi.required()
+    }).messages({ 'any.required': '实际成本为项目管理类目下必填' })
   }),
 
   update: Joi.object({
@@ -114,11 +151,48 @@ const taskSchemas = {
     assigned_to: Joi.number().integer().optional(),
     assignee_id: Joi.number().integer().optional(),
     parent_id: Joi.number().integer().allow(null).optional(),
-    category: Joi.string().valid('生产协调', '项目管理', '综合工作').optional(),
+    category: Joi.string().valid('生产协调', '项目管理', '综合工作', 'project_management').optional(),
     tags: Joi.array().items(Joi.string().max(30)).optional(),
     estimated_hours: Joi.number().min(0).optional(),
     actual_hours: Joi.number().min(0).optional(),
-    progress: Joi.number().min(0).max(100).optional()
+    progress: Joi.number().min(0).max(100).optional(),
+    // 项目管理字段校验：如果将category更新为项目管理，则这些字段必填
+    contract_number: Joi.string().when('category', {
+      is: Joi.valid('项目管理', 'project_management'),
+      then: Joi.string().required()
+    }),
+    contract_amount: Joi.number().min(0).when('category', {
+      is: Joi.valid('项目管理', 'project_management'),
+      then: Joi.required()
+    }),
+    annual_revenue_plan: Joi.number().min(0).when('category', {
+      is: Joi.valid('项目管理', 'project_management'),
+      then: Joi.required()
+    }),
+    client_owner: Joi.string().when('category', {
+      is: Joi.valid('项目管理', 'project_management'),
+      then: Joi.string().required()
+    }),
+    contract_start_date: Joi.date().iso().when('category', {
+      is: Joi.valid('项目管理', 'project_management'),
+      then: Joi.required()
+    }),
+    contract_end_date: Joi.date().iso().when('category', {
+      is: Joi.valid('项目管理', 'project_management'),
+      then: Joi.required()
+    }),
+    actual_revenue: Joi.number().min(0).when('category', {
+      is: Joi.valid('项目管理', 'project_management'),
+      then: Joi.required()
+    }),
+    actual_value_workload: Joi.number().min(0).when('category', {
+      is: Joi.valid('项目管理', 'project_management'),
+      then: Joi.required()
+    }),
+    actual_cost: Joi.number().min(0).when('category', {
+      is: Joi.valid('项目管理', 'project_management'),
+      then: Joi.required()
+    })
   }),
 
   transfer: Joi.object({

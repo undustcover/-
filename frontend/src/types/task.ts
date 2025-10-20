@@ -15,6 +15,16 @@ export interface Task {
   status: TaskStatus
   priority: TaskPriority
   category: TaskType
+  // 项目管理字段
+  contract_number?: string
+  contract_amount?: number
+  annual_revenue_plan?: number
+  client_owner?: string
+  contract_start_date?: string
+  contract_end_date?: string
+  actual_revenue?: number
+  actual_value_workload?: number
+  actual_cost?: number
   assignee_id?: string
   assignee_name?: string
   creator_id: string
@@ -60,6 +70,16 @@ export interface CreateTaskRequest {
   due_date?: string
   estimated_hours?: number
   tags?: string[]
+  // 项目管理字段
+  contract_number?: string
+  contract_amount?: number
+  annual_revenue_plan?: number
+  client_owner?: string
+  contract_start_date?: string
+  contract_end_date?: string
+  actual_revenue?: number
+  actual_value_workload?: number
+  actual_cost?: number
 }
 
 // 更新任务请求
@@ -78,6 +98,16 @@ export interface UpdateTaskRequest {
   actual_hours?: number
   progress?: number
   tags?: string[]
+  // 项目管理字段
+  contract_number?: string
+  contract_amount?: number
+  annual_revenue_plan?: number
+  client_owner?: string
+  contract_start_date?: string
+  contract_end_date?: string
+  actual_revenue?: number
+  actual_value_workload?: number
+  actual_cost?: number
 }
 
 // 任务筛选条件

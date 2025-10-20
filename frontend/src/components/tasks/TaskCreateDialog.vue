@@ -235,6 +235,112 @@
             </el-checkbox-group>
           </el-form-item>
         </el-col>
+        
+        <!-- 项目管理字段 -->
+        <el-col v-if="isProjectCategory" :span="12">
+          <el-form-item label="合同编号" prop="contract_number">
+            <el-input v-model="formData.contract_number" placeholder="请输入合同编号" />
+          </el-form-item>
+        </el-col>
+        <el-col v-if="isProjectCategory" :span="12">
+          <el-form-item label="合同金额" prop="contract_amount">
+            <el-input-number
+              v-model="formData.contract_amount"
+              :min="0"
+              :precision="2"
+              :step="0.01"
+              controls-position="right"
+              style="width: 100%"
+            />
+          </el-form-item>
+        </el-col>
+        <el-col v-if="isProjectCategory" :span="12">
+          <el-form-item label="客户负责人" prop="client_owner">
+            <el-input v-model="formData.client_owner" placeholder="请输入客户负责人" />
+          </el-form-item>
+        </el-col>
+        <el-col v-if="isProjectCategory" :span="12">
+          <el-form-item label="合同开始日期" prop="contract_start_date">
+            <el-date-picker
+              v-model="formData.contract_start_date"
+              type="date"
+              placeholder="请选择开始日期"
+              format="YYYY-MM-DD"
+              value-format="YYYY-MM-DD"
+              style="width: 100%"
+            />
+          </el-form-item>
+        </el-col>
+        <el-col v-if="isProjectCategory" :span="12">
+          <el-form-item label="合同结束日期" prop="contract_end_date">
+            <el-date-picker
+              v-model="formData.contract_end_date"
+              type="date"
+              placeholder="请选择结束日期"
+              format="YYYY-MM-DD"
+              value-format="YYYY-MM-DD"
+              style="width: 100%"
+            />
+          </el-form-item>
+        </el-col>
+        <el-col v-if="isProjectCategory" :span="12">
+          <el-form-item label="年度营收计划" prop="annual_revenue_plan">
+            <el-input-number
+              v-model="formData.annual_revenue_plan"
+              :min="0"
+              :precision="2"
+              :step="0.01"
+              controls-position="right"
+              style="width: 100%"
+            />
+          </el-form-item>
+        </el-col>
+        <el-col v-if="isProjectCategory" :span="12">
+          <el-form-item label="实际营收" prop="actual_revenue">
+            <el-input-number
+              v-model="formData.actual_revenue"
+              :min="0"
+              :precision="2"
+              :step="0.01"
+              controls-position="right"
+              style="width: 100%"
+            />
+          </el-form-item>
+        </el-col>
+        <el-col v-if="isProjectCategory" :span="12">
+          <el-form-item label="实际价值工作量" prop="actual_value_workload">
+            <el-input-number
+              v-model="formData.actual_value_workload"
+              :min="0"
+              :precision="2"
+              :step="0.01"
+              controls-position="right"
+              style="width: 100%"
+            />
+          </el-form-item>
+        </el-col>
+        <el-col v-if="isProjectCategory" :span="12">
+          <el-form-item label="实际成本" prop="actual_cost">
+            <el-input-number
+              v-model="formData.actual_cost"
+              :min="0"
+              :precision="2"
+              :step="0.01"
+              controls-position="right"
+              style="width: 100%"
+            />
+          </el-form-item>
+        </el-col>
+        
+        <el-col :span="24">
+          <el-form-item label="通知设置">
+            <el-checkbox-group v-model="formData.notifications">
+              <el-checkbox label="email">邮件通知</el-checkbox>
+              <el-checkbox label="sms">短信通知</el-checkbox>
+              <el-checkbox label="system">系统通知</el-checkbox>
+            </el-checkbox-group>
+          </el-form-item>
+        </el-col>
       </el-row>
     </el-form>
     
@@ -312,7 +418,17 @@ const formData = ref({
   tags: [] as string[],
   related_tasks: [] as string[],
   parent_id: '' as string | '',
-  notifications: ['system'] as string[]
+  notifications: ['system'] as string[],
+  // 项目管理字段
+  contract_number: '',
+  contract_amount: null as number | null,
+  annual_revenue_plan: null as number | null,
+  client_owner: '',
+  contract_start_date: '',
+  contract_end_date: '',
+  actual_revenue: null as number | null,
+  actual_value_workload: null as number | null,
+  actual_cost: null as number | null
 })
 
 // 表单验证规则
@@ -362,6 +478,132 @@ const formRules: FormRules = {
         }
       },
       trigger: 'change'
+    }
+  ],
+  contract_number: [
+    {
+      validator: (rule, value, callback) => {
+        if (formData.value.category !== 'project_management') return callback()
+        if (!value) return callback(new Error('请输入合同编号'))
+        callback()
+      },
+      trigger: 'blur'
+    }
+  ],
+  contract_amount: [
+    {
+      validator: (rule, value, callback) => {
+        if (formData.value.category !== 'project_management') return callback()
+        if (value === null || value === undefined || value === '') {
+          return callback(new Error('请输入合同金额'))
+        }
+        const num = Number(value)
+        if (isNaN(num) || num < 0) {
+          return callback(new Error('合同金额不能为负数'))
+        }
+        callback()
+      },
+      trigger: 'blur'
+    }
+  ],
+  client_owner: [
+    {
+      validator: (rule, value, callback) => {
+        if (formData.value.category !== 'project_management') return callback()
+        if (!value) return callback(new Error('请输入客户负责人'))
+        callback()
+      },
+      trigger: 'blur'
+    }
+  ],
+  contract_start_date: [
+    {
+      validator: (rule, value, callback) => {
+        if (formData.value.category !== 'project_management') return callback()
+        if (!value) return callback(new Error('请选择合同开始日期'))
+        if (formData.value.contract_end_date && value > formData.value.contract_end_date) {
+          return callback(new Error('开始日期不能晚于结束日期'))
+        }
+        callback()
+      },
+      trigger: 'change'
+    }
+  ],
+  contract_end_date: [
+    {
+      validator: (rule, value, callback) => {
+        if (formData.value.category !== 'project_management') return callback()
+        if (!value) return callback(new Error('请选择合同结束日期'))
+        if (formData.value.contract_start_date && value < formData.value.contract_start_date) {
+          return callback(new Error('结束日期不能早于开始日期'))
+        }
+        callback()
+      },
+      trigger: 'change'
+    }
+  ],
+  annual_revenue_plan: [
+    {
+      validator: (rule, value, callback) => {
+        if (formData.value.category !== 'project_management') return callback()
+        if (value === null || value === undefined || value === '') {
+          return callback(new Error('请输入年度营收计划'))
+        }
+        const num = Number(value)
+        if (isNaN(num) || num < 0) {
+          return callback(new Error('年度营收计划不能为负数'))
+        }
+        callback()
+      },
+      trigger: 'blur'
+    }
+  ],
+  actual_revenue: [
+    {
+      validator: (rule, value, callback) => {
+        if (formData.value.category !== 'project_management') return callback()
+        if (value === null || value === undefined || value === '') {
+          return callback(new Error('请输入实际营收'))
+        }
+        const num = Number(value)
+        if (isNaN(num) || num < 0) {
+          return callback(new Error('实际营收不能为负数'))
+        }
+        callback()
+      },
+      trigger: 'blur'
+    }
+  ],
+  actual_value_workload: [
+    {
+      validator: (rule, value, callback) => {
+        if (formData.value.category !== 'project_management') return callback()
+        if (value === null || value === undefined || value === '') {
+          return callback(new Error('请输入实际价值工作量'))
+        }
+        const num = Number(value)
+        if (isNaN(num) || num < 0) {
+          return callback(new Error('实际价值工作量不能为负数'))
+        }
+        callback()
+      },
+      trigger: 'blur'
+    }
+  ],
+  actual_cost: [
+    {
+      validator: (rule, value, callback) => {
+        if (formData.value.category !== 'project_management') return callback()
+        if (value === null || value === undefined || value === '') {
+          return callback(new Error('请输入实际成本'))
+        }
+        const num = Number(value)
+        if (isNaN(num) || num < 0) {
+          return callback(new Error('实际成本不能为负数'))
+        }
+        callback()
+      },
+      trigger: 'blur'
     }
   ]
 }
@@ -533,7 +775,7 @@ const resetForm = () => {
 const fillFormData = (task: Task) => {
   formData.value = {
     title: task.title || '',
-    category: task.category || 'production_coordination',
+    category: mapDatabaseCategory(task.category) || 'production_coordination',
     priority: task.priority || 'medium',
     assigned_to: task.assignee?.id || task.assigned_to || '',
     status: task.status || 'pending',
@@ -545,7 +787,17 @@ const fillFormData = (task: Task) => {
     tags: task.tags || [],
     related_tasks: (task as any).related_tasks || [],
     parent_id: (task as any).parent_id ? String((task as any).parent_id) : '',
-    notifications: (task as any).notifications || ['system']
+    notifications: (task as any).notifications || ['system'],
+    // 项目管理字段
+    contract_number: (task as any).contract_number || '',
+    contract_amount: (task as any).contract_amount ?? null,
+    annual_revenue_plan: (task as any).annual_revenue_plan ?? null,
+    client_owner: (task as any).client_owner || '',
+    contract_start_date: (task as any).contract_start_date || '',
+    contract_end_date: (task as any).contract_end_date || '',
+    actual_revenue: (task as any).actual_revenue ?? null,
+    actual_value_workload: (task as any).actual_value_workload ?? null,
+    actual_cost: (task as any).actual_cost ?? null
   }
 }
 
@@ -559,15 +811,49 @@ const mapCategoryToDatabase = (category: string) => {
   return categoryMap[category] || category
 }
 
+// 反向映射：将数据库中的中文类别映射为前端枚举值
+const mapDatabaseCategory = (dbCategory: string) => {
+  const reverseMap: Record<string, string> = {
+    '生产协调': 'production_coordination',
+    '项目管理': 'project_management',
+    '综合工作': 'general_work'
+  }
+  return reverseMap[dbCategory] || dbCategory
+}
+
+// 项目管理字段仅在“项目管理”类别下显示的计算属性
+const isProjectCategory = computed(() => formData.value.category === 'project_management')
+
+// 清空项目管理字段
+const clearProjectFields = () => {
+  formData.value.contract_number = ''
+  formData.value.contract_amount = null
+  formData.value.annual_revenue_plan = null
+  formData.value.client_owner = ''
+  formData.value.contract_start_date = ''
+  formData.value.contract_end_date = ''
+  formData.value.actual_revenue = null
+  formData.value.actual_value_workload = null
+  formData.value.actual_cost = null
+}
+
+// 类别切换时，如果不是项目管理则清空相关字段
+watch(() => formData.value.category, (val) => {
+  if (val !== 'project_management') {
+    clearProjectFields()
+  }
+})
+
 // 提交表单
 const handleSubmit = async () => {
   if (!formRef.value) return
   
   try {
     await formRef.value.validate()
-    
     submitLoading.value = true
-    
+
+    const includePM = isProjectCategory.value
+
     if (props.isEdit && props.task) {
       // 更新任务
       const updateData = {
@@ -582,11 +868,24 @@ const handleSubmit = async () => {
         estimated_hours: formData.value.estimated_hours,
         progress: formData.value.progress,
         tags: formData.value.tags,
-        parent_id: formData.value.parent_id || undefined
+        parent_id: formData.value.parent_id || undefined,
+        ...(includePM ? {
+          contract_number: formData.value.contract_number || undefined,
+          contract_amount: formData.value.contract_amount ?? undefined,
+          annual_revenue_plan: formData.value.annual_revenue_plan ?? undefined,
+          client_owner: formData.value.client_owner || undefined,
+          contract_start_date: formData.value.contract_start_date || undefined,
+          contract_end_date: formData.value.contract_end_date || undefined,
+          actual_revenue: formData.value.actual_revenue ?? undefined,
+          actual_value_workload: formData.value.actual_value_workload ?? undefined,
+          actual_cost: formData.value.actual_cost ?? undefined
+        } : {})
       }
-      
-      await tasksStore.updateTask(props.task.id, updateData)
+
+      const res = await tasksStore.updateTask(props.task.id, updateData)
       ElMessage.success('任务更新成功')
+      emit('success', (res as any)?.data?.task ?? (res as any)?.data ?? props.task)
+      visible.value = false
     } else {
       // 创建任务
       const createData = {
@@ -600,20 +899,28 @@ const handleSubmit = async () => {
         due_date: formData.value.due_date || undefined,
         estimated_hours: formData.value.estimated_hours,
         tags: formData.value.tags,
-        parent_id: formData.value.parent_id || undefined
+        parent_id: formData.value.parent_id || undefined,
+        ...(includePM ? {
+          contract_number: formData.value.contract_number || undefined,
+          contract_amount: formData.value.contract_amount ?? undefined,
+          annual_revenue_plan: formData.value.annual_revenue_plan ?? undefined,
+          client_owner: formData.value.client_owner || undefined,
+          contract_start_date: formData.value.contract_start_date || undefined,
+          contract_end_date: formData.value.contract_end_date || undefined,
+          actual_revenue: formData.value.actual_revenue ?? undefined,
+          actual_value_workload: formData.value.actual_value_workload ?? undefined,
+          actual_cost: formData.value.actual_cost ?? undefined
+        } : {})
       }
-      
-      const response = await tasksStore.createTask(createData)
+
+      const res = await tasksStore.createTask(createData)
       ElMessage.success('任务创建成功')
-      emit('success', response.data)
+      emit('success', (res as any)?.data?.task ?? (res as any)?.data)
+      visible.value = false
     }
-    
-    handleClose()
   } catch (error) {
-    console.error('任务操作失败:', error)
-    if (error !== false) { // 不是表单验证错误
-      ElMessage.error(props.isEdit ? '任务更新失败' : '任务创建失败')
-    }
+    console.error('提交任务失败:', error)
+    ElMessage.error('提交任务失败，请检查表单')
   } finally {
     submitLoading.value = false
   }

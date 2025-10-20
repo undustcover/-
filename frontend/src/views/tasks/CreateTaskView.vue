@@ -49,22 +49,46 @@
         
         <el-row :gutter="20">
           <el-col :span="8">
-            <el-form-item label="任务类型" prop="type">
-              <el-select
-                v-model="form.type"
-                placeholder="请选择任务类型"
-                style="width: 100%"
-              >
-                <el-option
-                  v-for="type in taskTypes"
-                  :key="type.value"
-                  :label="type.label"
-                  :value="type.value"
-                />
+            <el-form-item label="任务类别" prop="category">
+              <el-select v-model="form.category" placeholder="请选择任务类别" style="width: 100%">
+                <el-option label="生产协调" value="production_coordination" />
+                <el-option label="项目管理" value="project_management" />
+                <el-option label="综合工作" value="general_work" />
               </el-select>
             </el-form-item>
           </el-col>
           
+          <el-col :span="8">
+            <el-form-item label="负责人" prop="assigned_to">
+              <el-select
+                v-model="form.assigned_to"
+                placeholder="请选择负责人"
+                style="width: 100%"
+                filterable
+                remote
+                :remote-method="searchUsers"
+                :loading="userLoading"
+              >
+                <el-option
+                  v-for="user in users"
+                  :key="user.id"
+                  :label="user.name"
+                  :value="user.id"
+                >
+                  <div class="user-option">
+                    <el-avatar :size="24" :src="user.avatar">
+                      {{ user.name.charAt(0) }}
+                    </el-avatar>
+                    <span class="user-name">{{ user.name }}</span>
+                    <span class="user-dept">{{ user.department }}</span>
+                  </div>
+                </el-option>
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        
+        <el-row :gutter="20">
           <el-col :span="8">
             <el-form-item label="优先级" prop="priority">
               <el-select
@@ -94,37 +118,6 @@
             </el-form-item>
           </el-col>
           
-          <el-col :span="8">
-            <el-form-item label="负责人" prop="assignee">
-              <el-select
-                v-model="form.assignee"
-                placeholder="请选择负责人"
-                style="width: 100%"
-                filterable
-                remote
-                :remote-method="searchUsers"
-                :loading="userLoading"
-              >
-                <el-option
-                  v-for="user in users"
-                  :key="user.id"
-                  :label="user.name"
-                  :value="user.id"
-                >
-                  <div class="user-option">
-                    <el-avatar :size="24" :src="user.avatar">
-                      {{ user.name.charAt(0) }}
-                    </el-avatar>
-                    <span class="user-name">{{ user.name }}</span>
-                    <span class="user-dept">{{ user.department }}</span>
-                  </div>
-                </el-option>
-              </el-select>
-            </el-form-item>
-          </el-col>
-        </el-row>
-        
-        <el-row :gutter="20">
           <el-col :span="8">
             <el-form-item label="开始时间" prop="start_date">
               <el-date-picker
@@ -214,6 +207,120 @@
         
 
         
+        <!-- 项目管理字段（仅项目管理类别显示） -->
+        <el-row v-if="isProjectCategory" :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="合同编号">
+              <el-input v-model="form.contract_number" placeholder="请输入合同编号" />
+            </el-form-item>
+          </el-col>
+
+         <el-col :span="12">
+           <el-form-item label="合同金额" prop="contract_amount">
+             <el-input-number
+               v-model="form.contract_amount"
+               :min="0"
+               :precision="2"
+               :step="0.01"
+               controls-position="right"
+               style="width: 100%"
+             />
+           </el-form-item>
+         </el-col>
+          
+          <el-col :span="12">
+
+            <el-form-item label="客户负责人" prop="client_owner">
+              <el-input v-model="form.client_owner" placeholder="请输入客户负责人" />
+            </el-form-item>
+          </el-col>
+          
+          <el-col :span="12">
+
+            <el-form-item label="合同开始日期" prop="contract_start_date">
+              <el-date-picker
+                v-model="form.contract_start_date"
+                type="date"
+                placeholder="请选择开始日期"
+                format="YYYY-MM-DD"
+                value-format="YYYY-MM-DD"
+                style="width: 100%"
+              />
+            </el-form-item>
+          </el-col>
+          
+          <el-col :span="12">
+
+            <el-form-item label="合同结束日期" prop="contract_end_date">
+              <el-date-picker
+                v-model="form.contract_end_date"
+                type="date"
+                placeholder="请选择结束日期"
+                format="YYYY-MM-DD"
+                value-format="YYYY-MM-DD"
+                style="width: 100%"
+              />
+            </el-form-item>
+          </el-col>
+          
+          <el-col :span="12">
+
+            <el-form-item label="年度营收计划" prop="annual_revenue_plan">
+              <el-input-number
+                v-model="form.annual_revenue_plan"
+                :min="0"
+                :precision="2"
+                :step="0.01"
+                controls-position="right"
+                style="width: 100%"
+              />
+            </el-form-item>
+          </el-col>
+          
+          <el-col :span="12">
+
+            <el-form-item label="实际营收" prop="actual_revenue">
+              <el-input-number
+                v-model="form.actual_revenue"
+                :min="0"
+                :precision="2"
+                :step="0.01"
+                controls-position="right"
+                style="width: 100%"
+              />
+            </el-form-item>
+          </el-col>
+          
+          <el-col :span="12">
+
+            <el-form-item label="实际价值工作量" prop="actual_value_workload">
+              <el-input-number
+                v-model="form.actual_value_workload"
+                :min="0"
+                :precision="2"
+                :step="0.01"
+                controls-position="right"
+                style="width: 100%"
+              />
+            </el-form-item>
+          </el-col>
+          
+          <el-col :span="12">
+
+            <el-form-item label="实际成本" prop="actual_cost">
+              <el-input-number
+                v-model="form.actual_cost"
+                :min="0"
+                :precision="2"
+                :step="0.01"
+                controls-position="right"
+                style="width: 100%"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        
+        
         <el-form-item label="通知设置">
           <el-checkbox-group v-model="form.notifications">
             <el-checkbox label="email">邮件通知</el-checkbox>
@@ -247,7 +354,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
@@ -271,18 +378,26 @@ const taskLoading = ref(false)
 const form = reactive({
   title: '',
   description: '',
-  type: '',
+  category: 'general_work',
   priority: 'medium',
-  assignee: '',
-  start_date: '',
+  assigned_to: '',
   due_date: '',
-  estimated_hours: 1,
+  estimated_hours: 0,
   tags: [],
   related_tasks: [],
   notifications: ['system'],
-  is_urgent: false,
   is_private: false,
-  auto_assign: false
+  auto_assign: false,
+  // 项目管理字段
+  contract_number: '',
+  contract_amount: null as number | null,
+  annual_revenue_plan: null as number | null,
+  client_owner: '',
+  contract_start_date: '',
+  contract_end_date: '',
+  actual_revenue: null as number | null,
+  actual_value_workload: null as number | null,
+  actual_cost: null as number | null
 })
 
 
@@ -341,13 +456,15 @@ const rules: FormRules = {
     { required: true, message: '请输入任务描述', trigger: 'blur' },
     { min: 10, max: 500, message: '描述长度在 10 到 500 个字符', trigger: 'blur' }
   ],
-  type: [
-    { required: true, message: '请选择任务类型', trigger: 'change' }
+
+  category: [
+    { required: true, message: '请选择任务类别', trigger: 'change' }
   ],
   priority: [
     { required: true, message: '请选择优先级', trigger: 'change' }
   ],
-  assignee: [
+
+  assigned_to: [
     { required: true, message: '请选择负责人', trigger: 'change' }
   ],
   due_date: [
@@ -435,33 +552,72 @@ const submitTask = async () => {
     
     submitLoading.value = true
     
-    // 准备提交数据
-    const submitData = {
-      ...form,
-      creator: authStore.user?.id,
-      // 只传递附件ID给后端
-      attachment_ids: form.attachments.map(att => att.id).filter(Boolean)
+    // 准备提交数据（仅在项目管理时包含项目字段，且映射类别到后端）
+    const categoryMap: Record<string, string> = {
+      production_coordination: '生产协调',
+      project_management: '项目管理',
+      general_work: '综合工作'
     }
-    
-    // 移除attachments字段，避免传递冗余数据
-    delete submitData.attachments
-    
-    // 调用API创建任务
-    console.log('提交任务数据:', submitData)
-    await tasksStore.createTask(submitData)
-    
-    ElMessage.success('任务创建成功')
-    router.push('/tasks')
-    
-  } catch (error) {
-    console.error('表单验证失败:', error)
-  } finally {
-    submitLoading.value = false
-  }
-}
+    const mappedCategory = categoryMap[form.category] || form.category
 
+    const baseData = {
+      title: form.title,
+      description: form.description,
+      category: mappedCategory,
+      priority: form.priority,
+      assigned_to: form.assigned_to || '',
+      due_date: form.due_date,
+      estimated_hours: form.estimated_hours,
+      tags: form.tags,
+      related_tasks: form.related_tasks,
+      notifications: form.notifications,
+      is_private: form.is_private,
+      auto_assign: form.auto_assign
+    }
+
+    const submitData = isProjectCategory.value
+      ? {
+          ...baseData,
+          contract_number: form.contract_number || '',
+          contract_amount: form.contract_amount ?? null,
+          annual_revenue_plan: form.annual_revenue_plan ?? null,
+          client_owner: form.client_owner || '',
+          contract_start_date: form.contract_start_date || '',
+          contract_end_date: form.contract_end_date || '',
+          actual_revenue: form.actual_revenue ?? null,
+          actual_value_workload: form.actual_value_workload ?? null,
+          actual_cost: form.actual_cost ?? null
+        }
+      : baseData
+     
+     // 调用API创建任务
+     console.log('提交任务数据:', submitData)
+     await tasksStore.createTask(submitData)
+     
+     ElMessage.success('任务创建成功')
+     router.push('/tasks')
+     
+   } catch (error) {
+     console.error('表单验证失败:', error)
+   } finally {
+     submitLoading.value = false
+   }
+ }
 onMounted(() => {
   // 初始化数据
+})
+watch(() => form.category, (newVal) => {
+  if (newVal !== 'project_management') {
+    form.contract_number = ''
+    form.contract_amount = null
+    form.annual_revenue_plan = null
+    form.client_owner = ''
+    form.contract_start_date = ''
+    form.contract_end_date = ''
+    form.actual_revenue = null
+    form.actual_value_workload = null
+    form.actual_cost = null
+  }
 })
 </script>
 

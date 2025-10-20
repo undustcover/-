@@ -184,7 +184,7 @@
                   {{ tag }}
                 </el-tag>
                 <span v-if="task.tags.length > 2" class="more-tags">
-                  +{{ task.tags.length - 2 }}
+                  {{ "+" + (task.tags.length - 2) }}
                 </span>
               </div>
               

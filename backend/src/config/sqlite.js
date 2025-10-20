@@ -62,23 +62,30 @@ const createTables = () => {
         description TEXT,
         status TEXT DEFAULT 'pending',
         priority TEXT DEFAULT 'medium',
-        assignee_id INTEGER,
-        creator_id INTEGER NOT NULL,
-        project_id INTEGER,
+        assigned_to INTEGER,
+        created_by INTEGER NOT NULL,
         parent_id INTEGER,
         start_date DATETIME,
-        end_date DATETIME,
-        actual_start_date DATETIME,
-        actual_end_date DATETIME,
+        due_date DATETIME,
         progress INTEGER DEFAULT 0,
         estimated_hours REAL,
         actual_hours REAL,
         tags TEXT,
+        category TEXT,
+        contract_number TEXT,
+        contract_amount REAL DEFAULT 0,
+        annual_revenue_plan REAL DEFAULT 0,
+        client_owner TEXT,
+        contract_start_date DATE,
+        contract_end_date DATE,
+        actual_revenue REAL DEFAULT 0,
+        actual_value_workload REAL DEFAULT 0,
+        actual_cost REAL DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         deleted_at DATETIME,
-        FOREIGN KEY (assignee_id) REFERENCES users(id),
-        FOREIGN KEY (creator_id) REFERENCES users(id),
+        FOREIGN KEY (assigned_to) REFERENCES users(id),
+        FOREIGN KEY (created_by) REFERENCES users(id),
         FOREIGN KEY (parent_id) REFERENCES tasks(id)
       )
     `;
@@ -352,7 +359,31 @@ const initTables = async () => {
         addColumnIfMissing('parent_id', "ALTER TABLE tasks ADD COLUMN parent_id INTEGER", () => {
           addColumnIfMissing('tags', "ALTER TABLE tasks ADD COLUMN tags TEXT", () => {
             addColumnIfMissing('category', "ALTER TABLE tasks ADD COLUMN category TEXT", () => {
-              resolve();
+              addColumnIfMissing('assigned_to', "ALTER TABLE tasks ADD COLUMN assigned_to INTEGER", () => {
+                addColumnIfMissing('created_by', "ALTER TABLE tasks ADD COLUMN created_by INTEGER", () => {
+                  addColumnIfMissing('due_date', "ALTER TABLE tasks ADD COLUMN due_date DATETIME", () => {
+                    addColumnIfMissing('contract_number', "ALTER TABLE tasks ADD COLUMN contract_number TEXT", () => {
+                      addColumnIfMissing('contract_amount', "ALTER TABLE tasks ADD COLUMN contract_amount REAL DEFAULT 0", () => {
+                        addColumnIfMissing('annual_revenue_plan', "ALTER TABLE tasks ADD COLUMN annual_revenue_plan REAL DEFAULT 0", () => {
+                          addColumnIfMissing('client_owner', "ALTER TABLE tasks ADD COLUMN client_owner TEXT", () => {
+                            addColumnIfMissing('contract_start_date', "ALTER TABLE tasks ADD COLUMN contract_start_date DATE", () => {
+                              addColumnIfMissing('contract_end_date', "ALTER TABLE tasks ADD COLUMN contract_end_date DATE", () => {
+                                addColumnIfMissing('actual_revenue', "ALTER TABLE tasks ADD COLUMN actual_revenue REAL DEFAULT 0", () => {
+                                  addColumnIfMissing('actual_value_workload', "ALTER TABLE tasks ADD COLUMN actual_value_workload REAL DEFAULT 0", () => {
+                                    addColumnIfMissing('actual_cost', "ALTER TABLE tasks ADD COLUMN actual_cost REAL DEFAULT 0", () => {
+                                      resolve();
+                                    });
+                                  });
+                                });
+                              });
+                            });
+                          });
+                        });
+                      });
+                    });
+                  });
+                });
+              });
             });
           });
         });

@@ -15,7 +15,16 @@ class Task {
       tags = [],
       parent_id,
       estimated_hours,
-      status = 'pending' // 获取 status，默认值为 'pending'
+      status = 'pending',
+      contract_number,
+      contract_amount,
+      annual_revenue_plan,
+      client_owner,
+      contract_start_date,
+      contract_end_date,
+      actual_revenue,
+      actual_value_workload,
+      actual_cost
     } = taskData;
 
     return await transaction(async (connection) => {
@@ -27,28 +36,43 @@ class Task {
             : []);
       const tagsJson = JSON.stringify(tagsArray);
 
-      // 插入任务
-      const taskSql = `
-        INSERT INTO tasks (title, description, priority, start_date, due_date, assigned_to, created_by, 
-                          category, estimated_hours, status, progress, created_at, parent_id, tags)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now', 'localtime'), ?, ?)
-      `;
-      
-      const taskResult = await query(taskSql, [
-        title, description, priority, start_date, due_date, assigned_to, created_by, category, estimated_hours, status, // 使用 status
-        parent_id || null, tagsJson
-      ]);
-      
+      // 构建动态列与参数
+      const columns = [
+        'title', 'description', 'priority', 'start_date', 'due_date',
+        'assigned_to', 'created_by', 'category', 'estimated_hours', 'status',
+        'progress', 'parent_id', 'tags'
+      ];
+      const values = [
+        title, description, priority, start_date, due_date,
+        assigned_to, created_by, category, estimated_hours, status,
+        0, parent_id || null, tagsJson
+      ];
+
+      // 项目管理新增字段（按需加入）
+      if (contract_number !== undefined) { columns.push('contract_number'); values.push(contract_number); }
+      if (contract_amount !== undefined) { columns.push('contract_amount'); values.push(contract_amount); }
+      if (annual_revenue_plan !== undefined) { columns.push('annual_revenue_plan'); values.push(annual_revenue_plan); }
+      if (client_owner !== undefined) { columns.push('client_owner'); values.push(client_owner); }
+      if (contract_start_date !== undefined) { columns.push('contract_start_date'); values.push(contract_start_date); }
+      if (contract_end_date !== undefined) { columns.push('contract_end_date'); values.push(contract_end_date); }
+      if (actual_revenue !== undefined) { columns.push('actual_revenue'); values.push(actual_revenue); }
+      if (actual_value_workload !== undefined) { columns.push('actual_value_workload'); values.push(actual_value_workload); }
+      if (actual_cost !== undefined) { columns.push('actual_cost'); values.push(actual_cost); }
+
+      const placeholders = columns.map(() => '?').join(', ');
+      const taskSql = `INSERT INTO tasks (${columns.join(', ')}) VALUES (${placeholders})`;
+      const taskResult = await query(taskSql, values);
+
       const taskId = taskResult.insertId || taskResult.lastID;
 
       // 记录操作日志
-       const logSql = `
-         INSERT INTO task_logs (task_id, user_id, action, details, created_at)
-         VALUES (?, ?, 'create', ?, datetime('now', 'localtime'))
-       `;
-       await query(logSql, [taskId, created_by, `创建任务: ${title}`]);
+      const logSql = `
+        INSERT INTO task_logs (task_id, user_id, action, details, created_at)
+        VALUES (?, ?, 'create', ?, CURRENT_TIMESTAMP)
+      `;
+      await query(logSql, [taskId, created_by, `创建任务: ${title}`]);
 
-       return taskId;
+      return taskId;
     });
   }
 
@@ -251,8 +275,10 @@ class Task {
   // 更新任务
   static async update(id, updateData, userId) {
     const allowedFields = [
-      'title', 'description', 'priority', 'status', 'start_date', 'due_date', 
-      'assigned_to', 'category', 'estimated_hours', 'actual_hours', 'progress', 'parent_id'
+      'title','description','priority','status','start_date','due_date',
+      'assigned_to','category','estimated_hours','actual_hours','progress','parent_id',
+      'contract_number','contract_amount','annual_revenue_plan','client_owner','contract_start_date','contract_end_date',
+      'actual_revenue','actual_value_workload','actual_cost'
     ];
     
     return await transaction(async (connection) => {
@@ -293,7 +319,7 @@ class Task {
         throw new Error('没有有效的更新字段');
       }
 
-      updates.push('updated_at = datetime(\'now\', \'localtime\')');
+      updates.push('updated_at = CURRENT_TIMESTAMP');
       params.push(id);
 
       const sql = `UPDATE tasks SET ${updates.join(', ')} WHERE id = ?`;
@@ -315,14 +341,14 @@ class Task {
       if (hasStatusUpdate && newStatus !== oldStatus) {
         const logSql = `
         INSERT INTO task_logs (task_id, user_id, action, details, created_at)
-        VALUES (?, ?, 'status_change', ?, datetime('now', 'localtime'))
+        VALUES (?, ?, 'status_change', ?, CURRENT_TIMESTAMP)
       `;
         const details = `任务「${taskTitle || id}」状态从 ${oldStatus} 变更为 ${newStatus}`;
         await query(logSql, [id, userId, details]);
       } else {
         const logSql = `
         INSERT INTO task_logs (task_id, user_id, action, details, created_at)
-        VALUES (?, ?, 'update', ?, datetime('now', 'localtime'))
+        VALUES (?, ?, 'update', ?, CURRENT_TIMESTAMP)
       `;
         await query(logSql, [id, userId, `更新任务: ${logDetails.join(', ')}`]);
       }
@@ -344,14 +370,14 @@ class Task {
       
       // 更新任务负责人
       await query(
-        'UPDATE tasks SET assigned_to = ?, updated_at = datetime(\'now\') WHERE id = ?',
+        'UPDATE tasks SET assigned_to = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
         [newAssignee, id]
       );
 
       // 记录转移日志
       const logSql = `
         INSERT INTO task_logs (task_id, user_id, action, details, created_at)
-        VALUES (?, ?, 'transfer', ?, datetime('now', 'localtime'))
+        VALUES (?, ?, 'transfer', ?, CURRENT_TIMESTAMP)
       `;
       const details = `任务转移: 从用户${oldAssignee}转移到用户${newAssignee}${reason ? ', 原因: ' + reason : ''}`;
       await query(logSql, [id, userId, details]);
@@ -366,7 +392,7 @@ class Task {
       // 插入延期申请
       const extensionSql = `
         INSERT INTO task_extensions (task_id, requested_by, original_due_date, new_due_date, reason, status, created_at)
-        SELECT ?, ?, due_date, ?, ?, 'pending', datetime('now', 'localtime')
+        SELECT ?, ?, due_date, ?, ?, 'pending', CURRENT_TIMESTAMP
         FROM tasks WHERE id = ?
       `;
       
@@ -375,7 +401,7 @@ class Task {
       // 记录操作日志
       const logSql = `
         INSERT INTO task_logs (task_id, user_id, action, details, created_at)
-        VALUES (?, ?, 'request_extension', ?, datetime('now', 'localtime'))
+        VALUES (?, ?, 'request_extension', ?, CURRENT_TIMESTAMP)
       `;
       const details = `申请延期至: ${newDueDate}, 原因: ${reason}`;
       await query(logSql, [id, userId, details]);
@@ -388,7 +414,7 @@ class Task {
   static async delete(id, userId) {
     return await transaction(async (connection) => {
       const result = await query(
-        'UPDATE tasks SET status = "deleted", updated_at = datetime(\'now\') WHERE id = ?',
+        'UPDATE tasks SET status = "deleted", updated_at = CURRENT_TIMESTAMP WHERE id = ?',
         [id]
       );
       
